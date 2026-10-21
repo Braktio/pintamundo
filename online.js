@@ -11,12 +11,16 @@ const DELAY = .1;
 const TURN_RATE = 6, PLAYER_SPEED = 4.8;
 const SERVER_KEY = 'pintamundo.server';
 
-// Address of the game server. Served by our own Node server it is the same host;
-// on GitHub Pages or inside the APK it must be configured (saved per device).
+// Public game server on the internet, used by GitHub Pages and by the Android app.
+export const PUBLIC_SERVER = '';
+// Inside the APK the page is served by Capacitor itself, not by our game server.
+const nativeApp = () => !!globalThis.Capacitor?.isNativePlatform?.();
+// Address of the game server: a saved choice first; served by our own Node server
+// (PC or Wi-Fi network) it is the same host; otherwise the public server.
 export function defaultServer() {
   try { const saved = localStorage.getItem(SERVER_KEY); if (saved) return saved; } catch { /* Storage may be blocked. */ }
-  if (/^https?:$/.test(location.protocol) && !location.hostname.endsWith('github.io')) return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
-  return '';
+  if (!nativeApp() && /^https?:$/.test(location.protocol) && !location.hostname.endsWith('github.io')) return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+  return PUBLIC_SERVER;
 }
 export function rememberServer(url) { try { localStorage.setItem(SERVER_KEY, url); } catch { /* Not critical. */ } }
 // Accepts "192.168.1.5:5173", "http://…", "https://…" or a full ws:// address.

@@ -7,7 +7,7 @@ import { WebSocketServer } from 'ws';
 import { Hub } from './multiplayer.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
-const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
+const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2' };
 // Only the files the browser needs are public; tests, scripts and the server stay private.
 const PUBLIC = new Set(['/index.html', '/styles.css', '/game.js', '/engine.js', '/renderer.js', '/online.js']);
 const server = createServer(async (request, response) => {
@@ -15,7 +15,7 @@ const server = createServer(async (request, response) => {
     const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
     if (path === '/health') { response.writeHead(200, { 'Content-Type': 'text/plain' }); response.end('ok'); return; }
     const file = path === '/' ? '/index.html' : path;
-    if (!PUBLIC.has(file)) throw new Error('not public');
+    if (!PUBLIC.has(file) && !/^\/fonts\/[a-z0-9-]+\.woff2$/.test(file)) throw new Error('not public');
     const target = resolve(root, '.' + file), data = await readFile(target);
     response.writeHead(200, { 'Content-Type': types[extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
     response.end(data);

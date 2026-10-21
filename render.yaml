@@ -1,0 +1,15 @@
+# Render blueprint: the online game server (also serves the web version of the game).
+# Free plan: it sleeps after 15 minutes without players and wakes up on the next connection.
+services:
+  - type: web
+    name: pintamundo
+    runtime: node
+    plan: free
+    region: virginia
+    buildCommand: npm ci --omit=dev
+    startCommand: node server.mjs
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

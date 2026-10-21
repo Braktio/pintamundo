@@ -1,3 +1,8 @@
+/* Fonts ship with the game (SIL Open Font License, see fonts/) so it works offline and inside the APK. */
+@font-face { font-family:'Lilita One'; font-style:normal; font-weight:400; font-display:swap; src:url('fonts/lilita-one-latin-400-normal.woff2') format('woff2') }
+@font-face { font-family:'Baloo 2'; font-style:normal; font-weight:500; font-display:swap; src:url('fonts/baloo-2-latin-500-normal.woff2') format('woff2') }
+@font-face { font-family:'Baloo 2'; font-style:normal; font-weight:700; font-display:swap; src:url('fonts/baloo-2-latin-700-normal.woff2') format('woff2') }
+@font-face { font-family:'Baloo 2'; font-style:normal; font-weight:800; font-display:swap; src:url('fonts/baloo-2-latin-800-normal.woff2') format('woff2') }
 :root {
   color-scheme:light;
   --ink:#1c2a6e;

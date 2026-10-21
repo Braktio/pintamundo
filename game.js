@@ -34,6 +34,8 @@ async function enterFullscreen() {
     if (document.fullscreenElement && screen.orientation?.lock) await screen.orientation.lock('landscape');
   } catch { /* The landscape prompt covers browsers that do not support orientation lock. */ }
 }
+// Inside the Android app the game is already full screen and locked to landscape.
+if (globalThis.Capacitor?.isNativePlatform?.()) $('fullscreen').hidden = true;
 $('fullscreen').onclick = async () => {
   if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch {} }
   else await enterFullscreen();
@@ -533,10 +535,19 @@ async function joinOnline(kind, code = '') {
   if (kind === 'join' && !code.trim()) { toast('Escribe el código de la sala de tu amigo.'); return; }
   if (!online || online.connection.url !== url || !online.connection.isOpen) {
     disconnect();
-    dialog('<p class="eyebrow">🌐 En línea</p><h2>Conectando…</h2><div class="connecting" aria-hidden="true">🛰️</div>');
-    const connection = new Connection(url, onServerMessage, onDisconnect);
-    try { await connection.open(); }
-    catch { $('dialog').close(); toast('No pudimos conectar con el servidor. Revisa la dirección y que estés en la misma red Wi-Fi.'); return; }
+    dialog('<p class="eyebrow">🌐 En línea</p><h2>Conectando…</h2><div class="connecting" aria-hidden="true">🛰️</div><p id="connect-note"></p>');
+    // A free server sleeps when nobody plays and needs up to a minute to wake up, so retry a while.
+    let connection = null;
+    for (let attempt = 0; attempt < 8 && !connection; attempt++) {
+      const candidate = new Connection(url, onServerMessage, onDisconnect);
+      try { await candidate.open(); connection = candidate; }
+      catch {
+        if (!$('connect-note')) return; // The child closed the window.
+        $('connect-note').textContent = 'El servidor se está despertando… puede tardar hasta un minuto. ⏳';
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+    }
+    if (!connection) { $('dialog').close(); toast('No pudimos conectar con el servidor. Revisa la dirección o inténtalo más tarde.'); return; }
     online = { connection, private: kind !== 'quick', lobby: null };
     rememberServer(url);
   }

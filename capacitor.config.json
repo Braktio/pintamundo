@@ -1,0 +1,13 @@
+{
+  "appId": "com.braktio.pintamundo",
+  "appName": "Pintamundo",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#1f55e0"
+  }
+}

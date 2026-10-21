@@ -2,3 +2,11 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+www/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+*.apk
+*.keystore
+firma-android/

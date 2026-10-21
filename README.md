@@ -107,6 +107,21 @@ Desde la versión de GitHub Pages hay que escribir la dirección del servidor en
 
 Archivos: `multiplayer.mjs` (salas, códigos, relleno con robots y envío de cambios), `online.js` (conexión, réplica de la partida y suavizado en el teléfono) y `server.mjs` (sirve el juego, `/ws` para las partidas y `/health` para los servicios de alojamiento). La comprobación `node scripts/online-check.mjs "ruta/a/chrome.exe"` abre dos pestañas que juegan la misma partida.
 
+## App de Android (APK)
+
+El proyecto Android (Capacitor 8) está en `android/`. En cada cambio en `main`, GitHub Actions construye una APK firmada y la publica siempre en el mismo enlace: **Releases → «Pintamundo para Android» → `pintamundo.apk`**. Para instalarla, ábrela desde el teléfono y permite instalar apps de origen desconocido. Cada versión se instala encima de la anterior sin perder el progreso.
+
+- La app va siempre en horizontal y a pantalla completa, con su icono y pantalla de carga (generados desde `assets/` con `npx capacitor-assets generate --android`).
+- Las fuentes van dentro del juego (`fonts/`), así que funciona sin internet en el modo de un jugador.
+- Para el modo en línea usa `PUBLIC_SERVER` de `online.js`; en **⚙️ Servidor** se puede escribir otro (por ejemplo, el del PC en la Wi-Fi).
+- Para construirla en local hace falta Java 21: `npm run android:sync` y luego `cd android && ./gradlew assembleRelease`.
+
+**Clave de firma:** está en `firma-android/` (fuera de git) y en los secretos del repositorio (`PINTAMUNDO_KEYSTORE_B64`, `PINTAMUNDO_KEYSTORE_PASSWORD`). Sin ella no se pueden publicar actualizaciones, tampoco en Google Play; guarda una copia de seguridad.
+
+## Servidor en internet
+
+`render.yaml` describe el servidor para Render (plan gratuito, región Virginia): `npm ci --omit=dev`, `node server.mjs` y comprobación en `/health`. En el plan gratuito se duerme tras 15 minutos sin jugadores; el juego reintenta la conexión hasta un minuto mientras se despierta.
+
 ## Archivos
 
 - `engine.js`: conquista, colisiones de punta, superposición de estelas, IA, Wall Surge, habilidades y validación del perfil.
