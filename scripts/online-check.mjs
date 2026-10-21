@@ -76,6 +76,25 @@ try {
   await ana.screenshot('preview-online-ana.png');
   await beto.screenshot('preview-online-beto.png');
   assert.match(await ana.evaluate('document.getElementById("hud-timer").textContent'), /^[0-3]:\d\d$/, 'the match timer is shown');
+  assert.ok(await ana.evaluate('document.querySelector(".goal-bar").getBoundingClientRect().width') <= 300, 'the progress bar stays compact');
+  // Beto keeps going right with his trail exposed until someone catches him, then watches.
+  let watching = false;
+  // Meanwhile Ana circles inside her own zone (W, D, S, A) so she stays safe and the match goes on.
+  const turns = ['KeyW', 'KeyD', 'KeyS', 'KeyA'];
+  for (let i = 0; i < 60 && !watching; i++) {
+    await ana.evaluate(`document.dispatchEvent(new KeyboardEvent('keyup',{code:'${turns[(i + 3) % 4]}'}));document.dispatchEvent(new KeyboardEvent('keydown',{code:'${turns[i % 4]}'}))`);
+    await sleep(400); watching = await beto.evaluate('!document.getElementById("spectate").hidden');
+  }
+  if (watching) {
+    await sleep(400);
+    await beto.screenshot('preview-online-spectator.png');
+    const name = await beto.evaluate('document.getElementById("spectate-name").textContent');
+    assert.ok(name.length > 0, 'spectator mode names who you are watching');
+    assert.equal(await beto.evaluate('getComputedStyle(document.getElementById("joystick")).display'), 'none', 'controls hide while watching');
+    await beto.evaluate('document.getElementById("spectate-next").click()');
+    await sleep(300);
+    console.log('Spectator OK: watching ' + name);
+  } else console.log('Beto was not caught within 30 s; spectator mode not exercised this run.');
   assert.deepEqual(errors, [], 'no browser errors');
   console.log('Online OK: room code, friend joins, host starts, both phones play the same match.');
   await send('Browser.close');

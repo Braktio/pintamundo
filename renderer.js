@@ -409,8 +409,9 @@ export class Renderer {
     c.strokeStyle = INK; c.lineWidth = 3.5; c.stroke();
   }
   draw(arena, time, dt, demo = false) {
-    const c = this.ctx, player = arena.actors[0];
-    this.camera.x = player.x; this.camera.y = player.y;
+    // The camera follows the local player, or whoever is being watched in spectator mode.
+    const c = this.ctx, player = arena.actors[0], focus = arena.actors[arena.follow ?? 0] || player;
+    this.camera.x = focus.x; this.camera.y = focus.y;
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     for (const id in this.pops) this.pops[id] -= dt * 2.5;
     for (const id in this.moods) this.moods[id] -= dt;

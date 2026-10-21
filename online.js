@@ -1,12 +1,14 @@
 // Client side of online matches: talks to the server and mirrors its authoritative
 // arena. The local player is always remapped to actor 0, so the renderer and the
 // HUD work exactly as in solo games. Other players are smoothed between snapshots.
-import { characterFor } from './engine.js';
+import { characterFor, WIDTH, HEIGHT, clamp } from './engine.js';
 
 const FLAG_POWERS = ['dash', 'shield', 'ghost', 'paint', 'magnet'];
 const FROZEN = 32, WALL = 64, HUMAN = 128;
-// Render slightly in the past so there are always two snapshots to blend between.
-const DELAY = .12;
+// Others are drawn slightly in the past so there are always two snapshots to blend between.
+const DELAY = .1;
+// Same movement rules as the engine, used to predict the local player.
+const TURN_RATE = 6, PLAYER_SPEED = 4.8;
 const SERVER_KEY = 'pintamundo.server';
 
 // Address of the game server. Served by our own Node server it is the same host;
@@ -29,22 +31,32 @@ export function normalizeServer(text) {
 }
 
 export class Connection {
-  constructor(url, onMessage, onClose) { Object.assign(this, { url, onMessage, onClose }); }
+  constructor(url, onMessage, onClose) { Object.assign(this, { url, onMessage, onClose, rtt: 0 }); }
   open() {
     return new Promise((resolve, reject) => {
       let socket;
       try { socket = new WebSocket(this.url); } catch (error) { reject(error); return; }
       const timer = setTimeout(() => { socket.close(); reject(new Error('timeout')); }, 7000);
-      socket.onopen = () => { clearTimeout(timer); resolve(); };
+      socket.onopen = () => {
+        clearTimeout(timer);
+        // Round-trip time feeds the local prediction; measured every 2 s.
+        this.ping = setInterval(() => this.send({ t: 'ping', c: performance.now() }), 2000);
+        this.send({ t: 'ping', c: performance.now() });
+        resolve();
+      };
       socket.onerror = () => { clearTimeout(timer); reject(new Error('connection')); };
-      socket.onmessage = event => { let data; try { data = JSON.parse(event.data); } catch { return; } this.onMessage(data); };
-      socket.onclose = () => { clearTimeout(timer); this.onClose?.(); };
+      socket.onmessage = event => {
+        let data; try { data = JSON.parse(event.data); } catch { return; }
+        if (data.t === 'pong') { const sample = performance.now() - data.c; this.rtt = this.rtt ? this.rtt * .7 + sample * .3 : sample; return; }
+        this.onMessage(data);
+      };
+      socket.onclose = () => { clearTimeout(timer); clearInterval(this.ping); this.onClose?.(); };
       this.socket = socket;
     });
   }
   get isOpen() { return this.socket?.readyState === WebSocket.OPEN; }
   send(data) { if (this.isOpen) this.socket.send(JSON.stringify(data)); }
-  close() { this.onClose = null; this.socket?.close(); }
+  close() { this.onClose = null; clearInterval(this.ping); this.socket?.close(); }
 }
 
 export class Mirror {
@@ -106,14 +118,36 @@ export class Mirror {
     for (const event of message.e) arena.events.push(this.mapEvent(event));
   }
   remaining() { return Math.max(0, this.timeLimit - this.arena.time); }
-  // Blend the two snapshots around "now − DELAY" so movement stays smooth at 20 updates per second.
-  update(now) {
+  // Client-side prediction: start from the latest confirmed position and move ahead by the
+  // time since it arrived plus half the round trip, steering with the current local heading.
+  // The server stays the authority; small differences are absorbed instead of snapping.
+  predict(now, desired, rtt) {
+    const me = this.arena.actors[0], latest = this.snapshots.at(-1);
+    if (!me.alive || !latest?.positions[0] || !Number.isFinite(desired)) { me.predicted = false; return false; }
+    let [x, y, angle] = latest.positions[0];
+    let left = me.frozenUntil ? 0 : Math.min(.35, (now - latest.at) / 1000 + rtt / 2000);
+    const speed = PLAYER_SPEED * (me.timers.dash ? 1.6 : 1) * (me.wallSurge ? 1.35 : 1);
+    while (left > 0) {
+      const dt = Math.min(left, 1 / 60), turn = Math.atan2(Math.sin(desired - angle), Math.cos(desired - angle));
+      angle += clamp(turn, -TURN_RATE * dt, TURN_RATE * dt);
+      x = clamp(x + Math.cos(angle) * speed * dt, .65, WIDTH - .65); y = clamp(y + Math.sin(angle) * speed * dt, .65, HEIGHT - .65);
+      left -= dt;
+    }
+    if (!me.predicted || Math.hypot(me.x - x, me.y - y) > 2) { me.x = x; me.y = y; }
+    else { me.x += (x - me.x) * .35; me.y += (y - me.y) * .35; }
+    me.angle = angle; me.predicted = true;
+    return true;
+  }
+  // Blend the two snapshots around "now − DELAY" so others move smoothly; the local player is predicted.
+  update(now, desired, rtt = 0) {
     const list = this.snapshots; if (!list.length) return;
     const latest = list.at(-1), target = latest.time + (now - latest.at) / 1000 - DELAY;
     let a = list[0], b = latest;
     for (let i = 0; i < list.length - 1; i++) if (list[i].time <= target && list[i + 1].time >= target) { a = list[i]; b = list[i + 1]; break; }
     const span = b.time - a.time, k = span > 0 ? Math.min(1, Math.max(0, (target - a.time) / span)) : 1;
+    const predicted = this.predict(now, desired, rtt);
     for (const actor of this.arena.actors) {
+      if (actor.id === 0 && predicted) continue;
       const from = a.positions[actor.id], to = b.positions[actor.id]; if (!from || !to) continue;
       const turn = Math.atan2(Math.sin(to[2] - from[2]), Math.cos(to[2] - from[2]));
       actor.x = from[0] + (to[0] - from[0]) * k; actor.y = from[1] + (to[1] - from[1]) * k; actor.angle = from[2] + turn * k;

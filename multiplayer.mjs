@@ -3,7 +3,8 @@
 import { Arena, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, freshProfile } from './engine.js';
 
 export const STEP = 1 / 90;
-const DEFAULTS = { tickMs: 50, matchSeconds: 180, quickWait: 10, maxRooms: 200 };
+// 30 updates per second keep online movement smooth on phones.
+const DEFAULTS = { tickMs: 33, matchSeconds: 180, quickWait: 10, maxRooms: 200 };
 // Kid-friendly room codes such as GATO-42 (no Ñ or accents, easy to type).
 const WORDS = ['GATO', 'PATO', 'SAPO', 'LUNA', 'NUBE', 'OSO', 'PEZ', 'SOL', 'RANA', 'MONO', 'LEON', 'COCO', 'KIWI', 'FOCA', 'PUMA', 'ROSA', 'MAGO', 'FARO'];
 // Bits of the per-actor flag field in state messages.
@@ -164,6 +165,7 @@ export class Hub {
     else if (data.t === 'join') this.join(client, data.code);
     else if (data.t === 'start') { if (client.room?.host === client) client.room.begin(); }
     else if (data.t === 'leave') client.room?.remove(client);
+    else if (data.t === 'ping') { if (Number.isFinite(data.c)) this.send(client, { t: 'pong', c: data.c }); }
     else if (data.t === 'input') client.room?.input(client, data.a);
     else if (data.t === 'power') client.room?.power(client, data.s);
   }

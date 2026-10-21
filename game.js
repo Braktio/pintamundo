@@ -250,10 +250,36 @@ function enterMatch() {
   $('pilot-avatar').src = renderer.portraitURL(arena.actors[0]);
   $('leaders').innerHTML = arena.actors.map(actor => `<li data-actor="${actor.id}" class="${actor.id ? '' : 'me'}" style="--actor:${actor.color}"><img src="${renderer.portraitURL(actor)}" alt="${actor.name}"><i></i><b>0%</b></li>`).join('');
   $('timer-pill').hidden = !mirror;
+  stopSpectating();
 }
+// ---------- Spectator mode (online only) ----------
+// Real players come first, then robots; within each group, the biggest zone first.
+function spectateTargets() {
+  return arena.actors.filter(a => a.id !== 0 && a.alive).sort((a, b) => (b.human - a.human) || (b.count - a.count));
+}
+function spectate(id) {
+  const target = arena.actors[id];
+  if (!target?.alive) { const next = spectateTargets()[0]; if (!next) return; id = next.id; }
+  arena.follow = id;
+  document.body.classList.add('spectating');
+  $('spectate').hidden = false;
+  $('spectate-name').textContent = arena.actors[id].name;
+}
+function cycleSpectate(step) {
+  const targets = spectateTargets(); if (!targets.length) return;
+  const index = targets.findIndex(a => a.id === arena.follow);
+  spectate(targets[(index + step + targets.length) % targets.length].id);
+}
+function stopSpectating() {
+  arena.follow = undefined;
+  document.body.classList.remove('spectating');
+  $('spectate').hidden = true;
+}
+$('spectate-prev').onclick = () => cycleSpectate(-1);
+$('spectate-next').onclick = () => cycleSpectate(1);
 $('play').onclick = () => { if (screen === 'home') start(); else showScreen('home'); };
 function menu() {
-  disconnect();
+  disconnect(); stopSpectating();
   generation++; state = 'menu'; keys.clear(); aim = null; resetJoystick();
   $('dialog').close(); $('menu').hidden = false; $('hud').hidden = true;
   document.body.classList.remove('in-match');
@@ -399,13 +425,14 @@ function processEvents() {
       save();
     }
     if (event.type === 'death') {
+      if (event.id === 0) arena.lastKiller = event.killer;
       if (event.id === 0 && event.killer >= 0) profile.nemesis = arena.actors[event.killer].name;
       if (event.id === 0) tone('death'); else if (event.killer === 0) tone('kill');
     }
     if (event.type === 'capture' && event.id === 0 && event.cells) tone();
     if (event.type === 'ability' && event.id === 0) tone('ability');
     if (event.type === 'orb' && event.id === 0) tone('orb');
-    if (event.type === 'out' && event.id === 0) { announce('¡Te atraparon! 👀'); toast('Mira cómo termina la partida. ¡Tus estrellas ya están guardadas!'); }
+    if (event.type === 'out' && event.id === 0) { announce('¡Te atraparon! 👀'); toast('Ahora miras la partida. Cambia de jugador con ◀ ▶.'); spectate(arena.lastKiller ?? -1); }
     if (event.type === 'end') end(event.won, event.reason, event.ranking);
   }
 }
@@ -448,6 +475,7 @@ function renderHUD() {
     button.classList.toggle('ready', !remaining);
   }
   $('no-powers').hidden = player.powers.length > 0;
+  if (arena.follow !== undefined && !arena.actors[arena.follow]?.alive) spectate(-1);
   if (mirror) { const left = Math.ceil(mirror.remaining()); $('hud-timer').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; }
   const c = $('minimap').getContext('2d');
   c.clearRect(0, 0, 168, 144); c.fillStyle = '#ecfbf6'; c.fillRect(0, 0, 168, 144);
@@ -492,7 +520,7 @@ $('import-file').onchange = async event => {
 // Children never type names or chat: everyone is shown with their character's name.
 function openOnline() {
   const server = defaultServer();
-  dialog(`<p class="eyebrow">🌐 Jugar en línea</p><h2>¡Juega con otros niños!</h2><p>Si faltan jugadores, los robots ocupan su lugar. No hay chat: solo se ve tu personaje.</p><div class="online-actions"><button id="online-quick" class="dialog-button">⚡ Jugar rápido</button><button id="online-create" class="dialog-button">👫 Crear sala para amigos</button><div class="join-row"><input id="online-code" maxlength="8" placeholder="GATO-42" autocomplete="off" autocapitalize="characters" aria-label="Código de la sala"><button id="online-join" class="dialog-button">Unirme</button></div></div><details class="server-box" ${server ? '' : 'open'}><summary>⚙️ Servidor</summary><input id="online-server" value="${server}" placeholder="192.168.1.20:5173" autocomplete="off" aria-label="Dirección del servidor"><small>Pide ayuda a un adulto para cambiar esto.</small></details><div class="dialog-buttons"><button id="online-close" class="dialog-button secondary">Cancelar</button></div>`);
+  dialog(`<p class="eyebrow">🌐 Jugar en línea</p><h2>¡Juega con otros niños!</h2><p>Si faltan jugadores, los robots ocupan su lugar. No hay chat: solo se ve tu personaje.</p><div class="online-actions"><button id="online-quick" class="dialog-button">⚡ Jugar rápido</button><button id="online-create" class="dialog-button">👫 Crear sala para amigos</button><div class="join-row"><label for="online-code">¿Tu amigo ya creó una sala? Escribe su código:</label><input id="online-code" maxlength="8" placeholder="GATO-42" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="online-join" class="dialog-button">🚪 Unirme a la sala</button></div></div><details class="server-box" ${server ? '' : 'open'}><summary>⚙️ Servidor</summary><input id="online-server" value="${server}" placeholder="192.168.1.20:5173" autocomplete="off" aria-label="Dirección del servidor"><small>Pide ayuda a un adulto para cambiar esto.</small></details><div class="dialog-buttons"><button id="online-close" class="dialog-button secondary">Cancelar</button></div>`);
   $('online-quick').onclick = () => joinOnline('quick');
   $('online-create').onclick = () => joinOnline('create');
   $('online-join').onclick = () => joinOnline('join', $('online-code').value);
@@ -548,7 +576,7 @@ function showLobby(message) {
 }
 // After an online match the HUD is still on screen; go back to the menu before showing a lobby.
 function menuBehindLobby() {
-  generation++; keys.clear(); aim = null; resetJoystick(); mirror = null;
+  generation++; keys.clear(); aim = null; resetJoystick(); mirror = null; stopSpectating();
   $('menu').hidden = false; $('hud').hidden = true; document.body.classList.remove('in-match');
   arena = new Arena(profile); renderMenu();
 }
@@ -573,7 +601,7 @@ function frame(time) {
   const dt = Math.max(0, Math.min(.08, (time - lastFrame) / 1000)); lastFrame = time;
   if (state === 'playing' && mirror) {
     // Online: the server moves everything; the phone only sends its heading.
-    mirror.update(time); steer(); sendHeading(time); processEvents();
+    steer(); mirror.update(time, arena.actors[0].desired, online?.connection.rtt); sendHeading(time); processEvents();
     hudClock += dt; if (hudClock > .1) { renderHUD(); hudClock = 0; }
   } else if (state === 'playing') {
     accumulator += dt; steer();

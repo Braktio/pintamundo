@@ -283,13 +283,13 @@ footer button { font-size:15px; min-height:46px }
 .stat-pill { display:flex; align-items:center; gap:6px; min-width:96px; padding:0 14px 0 4px; height:40px; border:4px solid var(--ink); border-radius:99px; background:#fff; box-shadow:0 4px 0 var(--ink) }
 .stat-pill span { font-size:26px; margin-left:-12px; filter:drop-shadow(0 2px 0 var(--ink)) }
 .stat-pill b { margin-left:auto; font:20px var(--display); color:var(--ink) }
-.goal-bar { position:absolute; top:max(22px,calc(env(safe-area-inset-top) + 12px)); left:50%; width:min(44vw,480px); transform:translateX(-50%) }
-.goal-track { position:relative; height:34px; border:4px solid var(--ink); border-radius:99px; background:#4a4fc7; box-shadow:0 4px 0 var(--ink),inset 0 4px 0 #0002; overflow:hidden }
+.goal-bar { position:absolute; top:max(18px,calc(env(safe-area-inset-top) + 10px)); left:50%; width:min(28vw,300px); transform:translateX(-50%) }
+.goal-track { position:relative; height:26px; border:3px solid var(--ink); border-radius:99px; background:#4a4fc7; box-shadow:0 4px 0 var(--ink),inset 0 4px 0 #0002; overflow:hidden }
 .goal-track i { display:block; height:100%; width:0; background:linear-gradient(#8ff067,#43c41f); transition:width .3s }
-.goal-track b { position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:20px; line-height:1 }
-.milestone { position:absolute; top:-14px; left:var(--at); display:grid; place-items:center; width:30px; height:30px; transform:translateX(-50%); border:3px solid var(--ink); border-radius:50%; background:#d7dcf0; font-size:15px; filter:grayscale(1); transition:.2s }
+.goal-track b { position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:16px; line-height:1; -webkit-text-stroke:4px var(--ink) }
+.milestone { position:absolute; top:-9px; left:var(--at); display:grid; place-items:center; width:22px; height:22px; transform:translateX(-50%); border:2px solid var(--ink); border-radius:50%; background:#d7dcf0; font-size:11px; filter:grayscale(1); transition:.2s }
 .milestone.reached { background:var(--yellow); filter:none; animation:pop-in .4s cubic-bezier(.2,1.6,.4,1) }
-.goal-trophy { position:absolute; right:-22px; top:50%; transform:translateY(-55%); font-size:40px; filter:drop-shadow(0 3px 0 var(--ink)) }
+.goal-trophy { position:absolute; right:-18px; top:50%; transform:translateY(-55%); font-size:28px; filter:drop-shadow(0 3px 0 var(--ink)) }
 .leaderboard { position:absolute; top:max(10px,env(safe-area-inset-top)); right:max(10px,env(safe-area-inset-right)); display:flex; flex-direction:column; gap:6px; margin:0; padding:0; list-style:none }
 .leaderboard li { position:relative; display:flex; align-items:center; height:46px }
 .leaderboard li img { position:relative; z-index:1; width:46px; height:46px; border:4px solid var(--ink); border-radius:50%; background:#fff }
@@ -428,7 +428,7 @@ dialog li>b { flex:none; font-size:30px; line-height:1 }
   .match-controls .round-button { width:46px; height:46px }
   .pilot-badge { display:none }
   .stat-pill { height:36px; min-width:84px }
-  .goal-bar { width:min(40vw,420px) }
+  .goal-bar { width:min(26vw,240px) }
   .leaderboard { gap:4px }
   .leaderboard li { height:40px }
   .leaderboard li img { width:40px; height:40px }
@@ -453,7 +453,9 @@ dialog li>b { flex:none; font-size:30px; line-height:1 }
 .online-button { margin-top:6px; min-height:52px; padding:4px 22px; border:4px solid var(--ink); border-radius:18px; background:linear-gradient(#8fd4ff,#3fa6ff 55%,#1f7fe0); box-shadow:0 5px 0 var(--ink),inset 0 3px 0 #ffffff70; font:21px var(--display); color:#fff; -webkit-text-stroke:5px var(--ink); paint-order:stroke fill }
 .online-actions { display:flex; flex-direction:column; gap:12px; margin-top:14px }
 .online-actions .dialog-button { width:100% }
-.join-row { display:flex; gap:8px }
+.join-row { display:flex; flex-direction:column; gap:8px; padding:10px; border:3px solid #ffffff60; border-radius:20px }
+.join-row label { font:18px var(--display) }
+.join-row input#online-code { min-height:68px; font-size:34px; text-align:center; letter-spacing:4px }
 .join-row input,.server-box input { flex:1; min-width:0; min-height:56px; padding:4px 14px; border:4px solid var(--ink); border-radius:16px; background:#fff; font:22px var(--display); color:var(--ink); text-transform:uppercase; letter-spacing:1px }
 .server-box { margin-top:14px; padding:8px 12px; border:3px solid #ffffff60; border-radius:16px; text-align:left }
 .server-box summary { cursor:pointer; font:17px var(--display) }
@@ -494,5 +496,21 @@ dialog li>b { flex:none; font-size:30px; line-height:1 }
   .lobby-players li { padding:4px 2px }
   .lobby-status { margin:4px 0 }
   .online-actions { gap:8px; margin-top:8px }
-  .online-actions .dialog-button,.join-row input { min-height:48px }
+  .online-actions .dialog-button { min-height:48px }
+  .join-row input#online-code { min-height:56px; font-size:28px }
+}
+/* Spectator mode: after being caught online, watch the other players. */
+.spectate { position:absolute; left:50%; bottom:calc(16px + env(safe-area-inset-bottom)); transform:translateX(-50%); display:flex; align-items:center; gap:10px; padding:4px; border:4px solid var(--ink); border-radius:99px; background:#fff; box-shadow:0 5px 0 var(--ink); pointer-events:auto }
+.spectate span { padding:0 6px; font:18px var(--display); color:var(--ink); white-space:nowrap }
+.spectate span b { color:var(--blue) }
+.spectate .round-button { width:48px; height:48px; font-size:20px }
+body.spectating .joystick,body.spectating .abilities,body.spectating .danger { display:none!important }
+@media(orientation:landscape) and (max-height:560px) {
+  .result-stars { font-size:34px; margin:0 }
+  .results { margin:6px 0; gap:8px }
+  .results>div { padding:2px 4px }
+  .results strong { font-size:24px }
+  .ranking-place { font-size:18px }
+  .prize-chest { padding:2px 12px; font-size:17px }
+  .prize-chest svg { width:40px }
 }
