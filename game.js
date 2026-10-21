@@ -1,5 +1,6 @@
 import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, levelFor, levelXP } from './engine.js';
 import { Renderer, shade } from './renderer.js';
+import { Connection, Mirror, defaultServer, rememberServer, normalizeServer } from './online.js';
 
 const $ = id => document.getElementById(id);
 const SAVE_KEY = 'neon-frontier.profile.v1';
@@ -9,6 +10,8 @@ try { const raw = localStorage.getItem(SAVE_KEY); if (raw) profile = parseProfil
 catch { storageError = true; }
 const renderer = new Renderer($('arena'));
 let arena = new Arena(profile), state = 'menu', hangarTab = 'skins';
+// Online session: { connection, private, lobby }. `mirror` is set only while an online match runs.
+let online = null, mirror = null;
 let lastFrame = performance.now(), accumulator = 0, hudClock = 0, generation = 0;
 let aim = null, keys = new Set(), sound = false, audio = null;
 let announcedUntil = 0;
@@ -231,7 +234,12 @@ $('free-chest').onclick = () => {
 setInterval(() => { if (state === 'menu') renderFreeChest(); }, 30000);
 
 function start() {
-  generation++; arena = new Arena(profile); state = 'playing'; accumulator = 0; aim = null; keys.clear(); resetJoystick();
+  disconnect();
+  generation++; arena = new Arena(profile); mirror = null; state = 'playing'; accumulator = 0; aim = null; keys.clear(); resetJoystick();
+  enterMatch(); announce('¡A PINTAR! 🎨'); renderHUD();
+}
+// Shared by solo and online matches: reset effects and build the HUD for the current arena.
+function enterMatch() {
   renderer.camera = { x: arena.actors[0].x, y: arena.actors[0].y };
   renderer.particles = []; renderer.floats = []; renderer.rings = []; renderer.brokenTrails = [];
   document.body.classList.add('in-match');
@@ -241,16 +249,17 @@ function start() {
   document.documentElement.style.setProperty('--player', arena.actors[0].color);
   $('pilot-avatar').src = renderer.portraitURL(arena.actors[0]);
   $('leaders').innerHTML = arena.actors.map(actor => `<li data-actor="${actor.id}" class="${actor.id ? '' : 'me'}" style="--actor:${actor.color}"><img src="${renderer.portraitURL(actor)}" alt="${actor.name}"><i></i><b>0%</b></li>`).join('');
-  announce('¡A PINTAR! 🎨'); renderHUD();
+  $('timer-pill').hidden = !mirror;
 }
 $('play').onclick = () => { if (screen === 'home') start(); else showScreen('home'); };
 function menu() {
+  disconnect();
   generation++; state = 'menu'; keys.clear(); aim = null; resetJoystick();
   $('dialog').close(); $('menu').hidden = false; $('hud').hidden = true;
   document.body.classList.remove('in-match');
   arena = new Arena(profile); renderMenu(); save();
 }
-function end(won, reason) {
+function end(won, reason, ranking = null) {
   if (state !== 'playing' && state !== 'paused') return;
   state = 'ending'; keys.clear();
   resetJoystick(); renderHUD();
@@ -267,19 +276,27 @@ function end(won, reason) {
     if (currentGeneration !== generation) return;
     state = 'results';
     const title = won ? '¡GANASTE! 🏆' : stars >= 2 ? '¡Muy bien!' : stars ? '¡Buen intento!' : '¡Casi lo tienes!';
-    dialog(`<p class="eyebrow">${won ? '¡Pintaste más de la mitad!' : 'Fin de la partida'}</p><div class="result-stars" aria-label="${stars} de 3 estrellas">${[0, 1, 2].map(i => `<span class="${i < stars ? '' : 'off'}">⭐</span>`).join('')}</div><h2>${title}</h2><p>${won ? '¡El mapa es de tu color!' : reason}</p><div class="results"><div><strong>${Math.round(percent)}%</strong><small>🎨 Pintado</small></div><div><strong>${player.kills}</strong><small>🎯 Atrapados</small></div><div><strong>+${number(arena.bits)}</strong><small>⭐ Estrellas</small></div></div><p>+${number(arena.xp)} XP · Nivel ${levelFor(profile.xp)}</p>${prizeChest ? `<div class="prize-chest chest-${prizeChest}">${chestSVG(prizeChest, 64)}<b>¡Ganaste un ${CHESTS[prizeChest].name}!</b></div>` : '<p>Pinta un poco más para ganar un cofre 🎁</p>'}<div class="dialog-buttons"><button class="dialog-button" id="retry">¡OTRA VEZ! ▶</button><button class="dialog-button secondary" id="to-menu">🏠 Menú</button></div>`);
+    dialog(`<p class="eyebrow">${won ? '¡Pintaste más de la mitad!' : 'Fin de la partida'}</p><div class="result-stars" aria-label="${stars} de 3 estrellas">${[0, 1, 2].map(i => `<span class="${i < stars ? '' : 'off'}">⭐</span>`).join('')}</div><h2>${title}</h2><p>${won ? '¡El mapa es de tu color!' : reason}</p><div class="results"><div><strong>${Math.round(percent)}%</strong><small>🎨 Pintado</small></div><div><strong>${player.kills}</strong><small>🎯 Atrapados</small></div><div><strong>+${number(arena.bits)}</strong><small>⭐ Estrellas</small></div></div><p>+${number(arena.xp)} XP · Nivel ${levelFor(profile.xp)}</p>${prizeChest ? `<div class="prize-chest chest-${prizeChest}">${chestSVG(prizeChest, 64)}<b>¡Ganaste un ${CHESTS[prizeChest].name}!</b></div>` : '<p>Pinta un poco más para ganar un cofre 🎁</p>'}<div class="dialog-buttons"><button class="dialog-button" id="retry">${!online ? '¡OTRA VEZ! ▶' : online.private ? '👫 Volver a la sala' : '¡OTRA PARTIDA! ▶'}</button><button class="dialog-button secondary" id="to-menu">🏠 Menú</button></div>`);
     tone(won ? 'level' : stars ? 'capture' : 'death');
-    $('retry').onclick = start; $('to-menu').onclick = menu;
+    if (ranking) $('dialog-content').querySelector('h2').insertAdjacentHTML('afterend', `<p class="ranking-place">🏅 Quedaste en el puesto ${ranking.indexOf(0) + 1} de ${ranking.length}</p>`);
+    $('retry').onclick = !online ? start : online.private ? () => online.lobby ? showLobby(online.lobby) : toast('La sala se está preparando…') : () => joinOnline('quick');
+    $('to-menu').onclick = menu;
   }, 750);
 }
 function pause() {
-  if (state !== 'playing') return;
+  if (state !== 'playing' || mirror) return;
   state = 'paused'; keys.clear();
   dialog('<p class="eyebrow">⏸ Pausa</p><h2>¡Un descanso!</h2><p>El juego te espera. Tus estrellas ya están guardadas.</p><div class="dialog-buttons"><button id="resume" class="dialog-button">▶ SEGUIR JUGANDO</button><button id="abandon" class="dialog-button secondary">🏁 Terminar</button></div>');
   $('resume').onclick = () => { $('dialog').close(); state = 'playing'; $('arena').focus({ preventScroll: true }); };
   $('abandon').onclick = () => { $('dialog').close(); arena.ended = true; end(false, 'Terminaste la partida. ¡Vuelve cuando quieras!'); };
 }
-$('pause').onclick = pause;
+// Online matches cannot pause: the button offers to leave instead.
+$('pause').onclick = () => {
+  if (!mirror) { pause(); return; }
+  dialog('<p class="eyebrow">🌐 En línea</p><h2>¿Salir de la partida?</h2><p>Los demás siguen jugando. Un robot tomará tu lugar.</p><div class="dialog-buttons"><button id="resume" class="dialog-button">▶ SEGUIR JUGANDO</button><button id="abandon" class="dialog-button secondary">🚪 Salir</button></div>');
+  $('resume').onclick = () => $('dialog').close();
+  $('abandon').onclick = menu;
+};
 document.addEventListener('visibilitychange', () => { if (document.hidden) { pause(); save(); } });
 addEventListener('blur', () => { keys.clear(); pause(); });
 addEventListener('pagehide', save);
@@ -288,6 +305,7 @@ setInterval(save, 10000);
 function activate(slot) {
   if (state !== 'playing') return;
   const power = arena.actors[0].powers[slot];
+  if (mirror) { if (power && arena.actors[0].alive) online.connection.send({ t: 'power', s: slot }); return; }
   if (power && arena.ability(0, power)) renderHUD();
 }
 document.querySelectorAll('[data-slot].ability').forEach(button => {
@@ -300,7 +318,7 @@ document.querySelectorAll('[data-slot].ability').forEach(button => {
 });
 document.addEventListener('keydown', event => {
   if (event.code === 'Escape') {
-    if (state === 'playing') { event.preventDefault(); pause(); }
+    if (state === 'playing') { event.preventDefault(); if (mirror) $('pause').click(); else pause(); }
     else if (state === 'paused') { event.preventDefault(); $('resume')?.click(); }
     else if ($('dialog').open) {
       event.preventDefault();
@@ -371,6 +389,7 @@ function processEvents() {
     if (event.type === 'reward') {
       const oldLevel = levelFor(profile.xp);
       profile.bits += event.bits; profile.xp += event.xp; profile.totalKills += event.kills;
+      if (mirror) { arena.bits += event.bits; arena.xp += event.xp; }
       // Each new level gives a rare chest; every fifth level a legendary one.
       if (levelFor(profile.xp) > oldLevel) {
         const level = levelFor(profile.xp), type = level % 5 === 0 ? 'legendario' : 'raro';
@@ -386,7 +405,8 @@ function processEvents() {
     if (event.type === 'capture' && event.id === 0 && event.cells) tone();
     if (event.type === 'ability' && event.id === 0) tone('ability');
     if (event.type === 'orb' && event.id === 0) tone('orb');
-    if (event.type === 'end') end(event.won, event.reason);
+    if (event.type === 'out' && event.id === 0) { announce('¡Te atraparon! 👀'); toast('Mira cómo termina la partida. ¡Tus estrellas ya están guardadas!'); }
+    if (event.type === 'end') end(event.won, event.reason, event.ranking);
   }
 }
 let wasSurging = false;
@@ -428,6 +448,7 @@ function renderHUD() {
     button.classList.toggle('ready', !remaining);
   }
   $('no-powers').hidden = player.powers.length > 0;
+  if (mirror) { const left = Math.ceil(mirror.remaining()); $('hud-timer').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; }
   const c = $('minimap').getContext('2d');
   c.clearRect(0, 0, 168, 144); c.fillStyle = '#ecfbf6'; c.fillRect(0, 0, 168, 144);
   for (let i = 0; i < SIZE; i++) if (arena.grid[i] >= 0) { c.fillStyle = arena.actors[arena.grid[i]].color + 'aa'; c.fillRect(i % WIDTH * 2, Math.floor(i / WIDTH) * 2, 2, 2); }
@@ -446,7 +467,7 @@ document.querySelectorAll('[data-help]').forEach(button => button.onclick = show
 $('dialog').addEventListener('cancel', event => {
   event.preventDefault();
   if (state === 'paused') $('resume')?.click();
-  else if (state === 'results') menu();
+  else if (state === 'results' || state === 'lobby') menu();
   else if (!$('crate-spinner')) $('dialog').close();
 });
 $('export').onclick = () => {
@@ -467,9 +488,94 @@ $('import-file').onchange = async event => {
   event.target.value = '';
 };
 
+// ---------- Online play ----------
+// Children never type names or chat: everyone is shown with their character's name.
+function openOnline() {
+  const server = defaultServer();
+  dialog(`<p class="eyebrow">🌐 Jugar en línea</p><h2>¡Juega con otros niños!</h2><p>Si faltan jugadores, los robots ocupan su lugar. No hay chat: solo se ve tu personaje.</p><div class="online-actions"><button id="online-quick" class="dialog-button">⚡ Jugar rápido</button><button id="online-create" class="dialog-button">👫 Crear sala para amigos</button><div class="join-row"><input id="online-code" maxlength="8" placeholder="GATO-42" autocomplete="off" autocapitalize="characters" aria-label="Código de la sala"><button id="online-join" class="dialog-button">Unirme</button></div></div><details class="server-box" ${server ? '' : 'open'}><summary>⚙️ Servidor</summary><input id="online-server" value="${server}" placeholder="192.168.1.20:5173" autocomplete="off" aria-label="Dirección del servidor"><small>Pide ayuda a un adulto para cambiar esto.</small></details><div class="dialog-buttons"><button id="online-close" class="dialog-button secondary">Cancelar</button></div>`);
+  $('online-quick').onclick = () => joinOnline('quick');
+  $('online-create').onclick = () => joinOnline('create');
+  $('online-join').onclick = () => joinOnline('join', $('online-code').value);
+  $('online-code').onkeydown = event => { if (event.key === 'Enter') $('online-join').click(); };
+  $('online-close').onclick = () => $('dialog').close();
+}
+async function joinOnline(kind, code = '') {
+  const typed = $('online-server') ? normalizeServer($('online-server').value) : '', url = typed || online?.connection.url || defaultServer();
+  if (!url) { toast('Escribe la dirección del servidor en ⚙️ Servidor.'); return; }
+  if (kind === 'join' && !code.trim()) { toast('Escribe el código de la sala de tu amigo.'); return; }
+  if (!online || online.connection.url !== url || !online.connection.isOpen) {
+    disconnect();
+    dialog('<p class="eyebrow">🌐 En línea</p><h2>Conectando…</h2><div class="connecting" aria-hidden="true">🛰️</div>');
+    const connection = new Connection(url, onServerMessage, onDisconnect);
+    try { await connection.open(); }
+    catch { $('dialog').close(); toast('No pudimos conectar con el servidor. Revisa la dirección y que estés en la misma red Wi-Fi.'); return; }
+    online = { connection, private: kind !== 'quick', lobby: null };
+    rememberServer(url);
+  }
+  online.private = kind !== 'quick'; online.lobby = null;
+  const character = characterFor(profile.skin);
+  online.connection.send({ t: kind, code, skin: ownsCharacter(profile, character.id) ? character.id : 'interceptor', color: playerColor(), easy: profile.easy === true });
+}
+function disconnect() {
+  if (!online) return;
+  online.connection.send({ t: 'leave' }); online.connection.close();
+  online = null; mirror = null;
+}
+function onDisconnect() {
+  const playing = state === 'playing' || state === 'lobby';
+  online = null; mirror = null;
+  if (playing) { menu(); toast('Se perdió la conexión con el servidor. 📡'); }
+}
+function onServerMessage(message) {
+  if (message.t === 'state') { if (mirror) mirror.state(message); return; }
+  if (message.t === 'lobby') {
+    online.lobby = message; online.private = message.private;
+    if (state === 'menu' || state === 'lobby') showLobby(message);
+    return;
+  }
+  if (message.t === 'start') { startOnline(message); return; }
+  if (message.t === 'error') { toast(message.message); if (state === 'lobby') { state = 'menu'; $('dialog').close(); } }
+}
+function showLobby(message) {
+  if (state === 'results') menuBehindLobby();
+  state = 'lobby';
+  const players = message.players.map(p => `<li class="${p.you ? 'you' : ''}"><img src="${renderer.portraitURL({ skin: p.skin, color: p.color }, 72)}" alt=""><b>${p.you ? 'Tú' : p.name}</b>${p.host ? '<span>👑</span>' : ''}</li>`).join('');
+  const empty = Array.from({ length: message.max - message.players.length }, () => '<li class="empty"><span class="robot" aria-hidden="true">🤖</span><b>Robot</b></li>').join('');
+  const status = !message.private ? `<p class="lobby-status">Empieza en <b>${message.startsIn}</b> s…</p>` : message.host ? '<p class="lobby-status">Cuando estén todos, pulsa empezar.</p>' : '<p class="lobby-status">Esperando a que 👑 empiece la partida…</p>';
+  dialog(`<p class="eyebrow">${message.private ? '👫 Sala de amigos' : '⚡ Jugar rápido'}</p>${message.private ? `<p class="lobby-hint">Comparte este código:</p><div class="room-code">${message.code}</div>` : '<h2>¡Buscando jugadores!</h2>'}<ul class="lobby-players">${players}${empty}</ul>${status}<div class="dialog-buttons">${message.private && message.host ? '<button id="lobby-start" class="dialog-button">¡EMPEZAR! ▶</button>' : ''}<button id="lobby-leave" class="dialog-button secondary">🚪 Salir</button></div>`);
+  if ($('lobby-start')) $('lobby-start').onclick = () => online.connection.send({ t: 'start' });
+  $('lobby-leave').onclick = menu;
+}
+// After an online match the HUD is still on screen; go back to the menu before showing a lobby.
+function menuBehindLobby() {
+  generation++; keys.clear(); aim = null; resetJoystick(); mirror = null;
+  $('menu').hidden = false; $('hud').hidden = true; document.body.classList.remove('in-match');
+  arena = new Arena(profile); renderMenu();
+}
+function startOnline(message) {
+  generation++; arena = new Arena(profile); mirror = new Mirror(arena, message);
+  state = 'playing'; aim = null; keys.clear(); resetJoystick(); lastHeading = { angle: NaN, at: 0 };
+  enterMatch(); announce('¡A PINTAR EN LÍNEA! 🌐'); renderHUD();
+}
+// Heading is sent when it changes noticeably, and at least every 200 ms.
+let lastHeading = { angle: NaN, at: 0 };
+function sendHeading(time) {
+  const player = arena.actors[0];
+  if (!player.alive || !online) return;
+  const turn = Math.abs(Math.atan2(Math.sin(player.desired - lastHeading.angle), Math.cos(player.desired - lastHeading.angle)));
+  if (!(turn > .03) && time - lastHeading.at < 200) return;
+  online.connection.send({ t: 'input', a: Math.round(player.desired * 1000) / 1000 });
+  lastHeading = { angle: player.desired, at: time };
+}
+$('online').onclick = openOnline;
+
 function frame(time) {
   const dt = Math.max(0, Math.min(.08, (time - lastFrame) / 1000)); lastFrame = time;
-  if (state === 'playing') {
+  if (state === 'playing' && mirror) {
+    // Online: the server moves everything; the phone only sends its heading.
+    mirror.update(time); steer(); sendHeading(time); processEvents();
+    hudClock += dt; if (hudClock > .1) { renderHUD(); hudClock = 0; }
+  } else if (state === 'playing') {
     accumulator += dt; steer();
     // A bounded fixed step keeps trail traversal and bot decisions frame-rate independent.
     while (accumulator >= 1 / 90 && state === 'playing') { arena.step(1 / 90); processEvents(); accumulator -= 1 / 90; }

@@ -1,5 +1,5 @@
 # Publishes the game on GitHub Pages every time main is updated.
-# Only the five files the browser needs are uploaded; tests run first.
+# Only the files the browser needs are uploaded; tests run first.
 name: Publicar en GitHub Pages
 on:
   push:
@@ -23,10 +23,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Instalar dependencias del servidor
+        run: npm ci
       - name: Pruebas
         run: node --test tests/*.test.js
       - name: Preparar solo los archivos del juego
-        run: mkdir _site && cp index.html styles.css game.js engine.js renderer.js _site/
+        run: mkdir _site && cp index.html styles.css game.js engine.js renderer.js online.js _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

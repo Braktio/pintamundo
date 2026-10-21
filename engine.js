@@ -167,35 +167,55 @@ export function openChest(profile, type, random = Math.random) {
 }
 // Bots pick distinct characters; rarer ones show up less often.
 const BOT_WEIGHTS = { comun: 40, raro: 30, epico: 18, legendario: 9, mitico: 3 };
+export const SPAWNS = [[42, 36], [26, 24], [59, 24], [25, 51], [59, 51], [42, 14], [43, 60]];
+export const MAX_PLAYERS = SPAWNS.length;
 export class Arena {
-  constructor(profile = freshProfile(), random = Math.random) {
+  // Solo: the profile's character is actor 0 and everyone else is a bot.
+  // Online: `options.humans` lists the connected players ({ skin, color, name }) that take
+  // the first ids; bots fill the remaining spawns. `options.timeLimit` ends the match by time.
+  constructor(profile = freshProfile(), random = Math.random, options = {}) {
     this.random = random;
     this.profile = profile;
     // Easy mode only softens the bots; the player's rules never change.
     this.easy = profile.easy === true;
+    this.solo = !options.humans;
+    this.timeLimit = options.timeLimit || 0;
     this.grid = new Int16Array(SIZE).fill(-1);
     this.trails = new Int16Array(SIZE).fill(-1);
     this.trailMasks = new Uint8Array(SIZE);
     this.wallRange = 40 / CELL_PIXELS;
-    this.events = []; this.orbs = []; this.projectiles = []; this.time = 0; this.revision = 0;
+    this.events = []; this.orbs = []; this.projectiles = []; this.time = 0; this.revision = 0; this.orbRevision = 0;
     this.ended = false; this.won = false; this.bits = 0; this.xp = 0;
-    const spawns = [[42, 36], [26, 24], [59, 24], [25, 51], [59, 51], [42, 14], [43, 60]];
-    const cast = [characterFor(profile.skin)];
-    for (let id = 1; id < spawns.length; id++) {
+    const humans = (options.humans || [{ skin: profile.skin, color: TRAILS.find(t => t.id === profile.trail)?.color || COLORS[0], name: 'Tú' }]).slice(0, MAX_PLAYERS);
+    const cast = humans.map(h => characterFor(h.skin));
+    for (let id = humans.length; id < SPAWNS.length; id++) {
       const pool = CHARACTERS.filter(c => !cast.includes(c) && (!this.easy || c.rarity === 'comun' || c.rarity === 'raro'));
       let roll = this.random() * pool.reduce((sum, c) => sum + BOT_WEIGHTS[c.rarity], 0);
       cast.push(pool.find(c => (roll -= BOT_WEIGHTS[c.rarity]) < 0) || pool.at(-1));
     }
-    this.actors = spawns.map(([x, y], id) => ({
-      id, name: id === 0 ? 'Tú' : cast[id].name, color: id ? COLORS[id] : TRAILS.find(t => t.id === profile.trail)?.color || COLORS[0],
+    // Every actor needs a distinct trail color; humans keep theirs unless it is already taken.
+    const used = [];
+    const pick = wanted => { const color = wanted && !used.includes(wanted) ? wanted : COLORS.find(c => !used.includes(c)); used.push(color); return color; };
+    const colors = SPAWNS.map((_, id) => id < humans.length ? pick(humans[id].color) : null).map((color, id) => color || pick(COLORS[id]));
+    this.actors = SPAWNS.map(([x, y], id) => ({
+      id, human: id < humans.length, name: id < humans.length ? humans[id].name : cast[id].name, color: colors[id],
       x: x + .5, y: y + .5, angle: -Math.PI / 2, desired: -Math.PI / 2,
-      alive: true, trail: [], count: 0, kills: 0, lastCell: cell(x, y),
+      alive: true, trail: [], count: 0, kills: 0, best: 0, bits: 0, xp: 0, lastCell: cell(x, y),
       timers: {}, ready: {}, aiAt: 0, route: [], skin: cast[id].id, rarity: cast[id].rarity, powers: [...cast[id].powers],
       stunUntil: 0, frozenUntil: 0, harvestUntil: 0, lastKiller: -1, wallSurge: false, wallSparkAt: 0
     }));
-    for (const actor of this.actors) this.seed(actor);
-    this.best = this.actors[0].count;
+    for (const actor of this.actors) { this.seed(actor); actor.best = actor.count; }
     for (let i = 0; i < 45; i++) this.spawnOrb();
+  }
+  // Solo screens read the local player's best territory.
+  get best() { return this.actors[0].best; }
+  // A player who disconnects is handed over to the AI so the match stays fair.
+  leave(id) { const actor = this.actors[id]; if (actor) { actor.human = false; actor.aiAt = 0; } }
+  finish(winner, reason) {
+    if (this.ended) return;
+    this.ended = true; this.won = winner === 0;
+    const ranking = [...this.actors].sort((a, b) => b.count - a.count || b.kills - a.kills).map(a => a.id);
+    this.emit('end', { won: this.won, winner, reason, ranking });
   }
   seed(actor) {
     for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
@@ -210,14 +230,17 @@ export class Arena {
     if (previous >= 0) this.actors[previous].count--;
     this.grid[index] = id;
     if (id >= 0) this.actors[id].count++;
+    this.changes?.add(index);
     return true;
   }
   emit(type, data = {}) { this.events.push({ type, ...data }); }
-  reward(cells = 0, kills = 0) {
-    const bits = cells / SIZE * 100 * 18 + kills * 120;
-    const xp = cells / SIZE * 100 * 30 + kills * 100;
-    this.bits += bits; this.xp += xp;
-    this.emit('reward', { bits, xp, kills });
+  grant(actor, bits, xp, kills = 0) {
+    actor.bits += bits; actor.xp += xp;
+    if (actor.id === 0) { this.bits += bits; this.xp += xp; }
+    this.emit('reward', { id: actor.id, bits, xp, kills });
+  }
+  reward(cells = 0, kills = 0, actor = this.actors[0]) {
+    this.grant(actor, cells / SIZE * 100 * 18 + kills * 120, cells / SIZE * 100 * 30 + kills * 100, kills);
   }
   active(actor, skill) { return (actor.timers[skill] || 0) > this.time; }
   cooldown(actor, skill) { return POWERS[skill].cooldown * RARITIES[actor.rarity || 'comun'].cooldown; }
@@ -250,7 +273,7 @@ export class Arena {
     if (!gained.length) return 0;
     this.revision++;
     if (kind === 'bomb') this.emit('bomb', { id: actor.id, x: actor.x, y: actor.y, cells: gained.length });
-    if (actor.id === 0) this.reward(gained.length);
+    if (actor.human) this.reward(gained.length, 0, actor);
     if (actor.trail.length) this.capture(actor); else this.checkWin();
     return gained.length;
   }
@@ -295,7 +318,7 @@ export class Arena {
     }
     this.clearTrail(actor); this.revision++;
     this.emit('capture', { id: actor.id, cells: gained.length, x: actor.x, y: actor.y });
-    if (actor.id === 0) this.reward(gained.length);
+    if (actor.human) this.reward(gained.length, 0, actor);
     this.checkWin();
     return gained.length;
   }
@@ -314,19 +337,24 @@ export class Arena {
     for (let i = 0; i < land.length; i++) this.assign(land[i], i < stolen ? killer.id : -1);
     if (killer?.alive) {
       killer.kills++;
-      if (killer.id === 0) this.reward(stolen, 1);
+      if (killer.human) this.reward(stolen, 1, killer);
       this.emit('fragments', { from: { x: victim.x, y: victim.y }, to: { x: killer.x, y: killer.y }, cells: stolen, color: killer.color });
     }
     const revenge = killer && killer.lastKiller === victim.id;
     victim.lastKiller = killer?.id ?? -1;
     this.emit('death', { id: victim.id, killer: killer?.id ?? -1, x: victim.x, y: victim.y, reason, revenge, trail: brokenTrail, cutIndex });
     this.revision++;
-    if (victim.id === 0) { this.ended = true; this.emit('end', { won: false, reason }); }
+    if (victim.human) {
+      if (this.solo) this.finish(-1, reason);
+      else { this.emit('out', { id: victim.id, reason }); if (!this.actors.some(a => a.human && a.alive)) this.finish(-1, '¡Atraparon a todos los jugadores!'); }
+    }
     this.checkWin();
   }
   checkWin() {
-    this.best = Math.max(this.best || 0, this.actors[0].count);
-    if (!this.ended && this.actors[0].count / SIZE > .5) { this.ended = this.won = true; this.emit('end', { won: true, reason: '¡Pintaste más de la mitad del mapa!' }); }
+    for (const actor of this.actors) if (actor.human) {
+      actor.best = Math.max(actor.best, actor.count);
+      if (!this.ended && actor.count / SIZE > .5) this.finish(actor.id, this.solo ? '¡Pintaste más de la mitad del mapa!' : `¡${actor.name} pintó más de la mitad del mapa!`);
+    }
   }
   visit(actor, index) {
     if (!actor.alive || index === actor.lastCell) return;
@@ -367,7 +395,7 @@ export class Arena {
   speed(actor) {
     return (actor.id ? this.easy ? 3.4 : 4.2 : 4.8) * (this.active(actor, 'dash') ? 1.6 : 1) * (actor.wallSurge ? 1.35 : 1);
   }
-  spawnOrb() { this.orbs.push({ x: 3 + this.random() * (WIDTH - 6), y: 3 + this.random() * (HEIGHT - 6), phase: this.random() * 6.28 }); }
+  spawnOrb() { this.orbRevision++; this.orbs.push({ x: 3 + this.random() * (WIDTH - 6), y: 3 + this.random() * (HEIGHT - 6), phase: this.random() * 6.28 }); }
   ai(actor) {
     if (this.time < actor.aiAt) return;
     actor.aiAt = this.time + .18 + this.random() * .15;
@@ -442,9 +470,10 @@ export class Arena {
   step(dt) {
     if (this.ended) return;
     this.time += dt;
+    if (this.timeLimit && this.time >= this.timeLimit) { this.finish(this.actors.reduce((a, b) => b.count > a.count ? b : a).id, '¡Se acabó el tiempo!'); return; }
     for (const actor of this.actors) {
       if (!actor.alive) continue;
-      if (actor.id) this.ai(actor);
+      if (!actor.human) this.ai(actor);
       if (actor.stunUntil > this.time) continue;
       if ((actor.x <= .7 && Math.cos(actor.desired) < 0) || (actor.x >= WIDTH - .7 && Math.cos(actor.desired) > 0)) actor.desired = Math.sin(actor.angle) >= 0 ? Math.PI / 2 : -Math.PI / 2;
       if ((actor.y <= .7 && Math.sin(actor.desired) < 0) || (actor.y >= HEIGHT - .7 && Math.sin(actor.desired) > 0)) actor.desired = Math.cos(actor.angle) >= 0 ? 0 : Math.PI;
@@ -476,13 +505,13 @@ export class Arena {
         const orb = this.orbs[i], distance = Math.hypot(orb.x - actor.x, orb.y - actor.y);
         if (this.active(actor, 'magnet') && distance < 14) {
           const move = Math.min(distance, dt * 12);
-          orb.x += (actor.x - orb.x) / (distance || 1) * move;
+          orb.x += (actor.x - orb.x) / (distance || 1) * move; this.orbRevision++;
           orb.y += (actor.y - orb.y) / (distance || 1) * move;
         }
         if (distance < .85) {
-          this.orbs.splice(i, 1); actor.harvestUntil = this.time + 10;
+          this.orbs.splice(i, 1); this.orbRevision++; actor.harvestUntil = this.time + 10;
           this.emit('orb', { id: actor.id, x: orb.x, y: orb.y });
-          if (actor.id === 0) { this.bits += 4; this.xp += 2; this.emit('reward', { bits: 4, xp: 2, kills: 0 }); }
+          if (actor.human) this.grant(actor, 4, 2);
         }
       }
     }

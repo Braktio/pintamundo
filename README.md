@@ -86,6 +86,27 @@ Cada punto porcentual conquistado entrega 18 Bits y 30 XP; cada baja, 120 Bits y
 
 Gato Rayo se regala en el nivel 2, Platillo Zum en el 5 y Dragoncito en el 10 (también pueden salir en cofres). El botón 🐢 del menú activa el **modo fácil**: los robots van más despacio, cazan desde más cerca y tu camino se dibuja más grueso. Los perfiles anteriores se migran solos: el antiguo contador de cofres pasa a cofres raros. Exportación e importación de perfil disponibles en el menú.
 
+## Multijugador en línea
+
+Desde el inicio, **🌐 Jugar en línea** ofrece:
+
+- **⚡ Jugar rápido**: entra en una sala pública; arranca a los 10 segundos y los robots rellenan los huecos hasta 7 jugadores.
+- **👫 Crear sala para amigos**: genera un código (por ejemplo `GATO-42`); los amigos lo escriben en **Unirme** y el anfitrión (👑) pulsa **¡Empezar!**. Al terminar, todos vuelven a la misma sala.
+
+Las partidas en línea duran 3 minutos. El servidor ejecuta el mismo `engine.js` 90 veces por segundo y es la autoridad: decide cortes, conquistas y recargas. Los teléfonos solo envían su rumbo y los botones de poder, y reciben unas 20 actualizaciones por segundo con lo que cambió (casillas, estelas, posiciones). Si alguien sale a mitad de partida, un robot ocupa su lugar. El jugador atrapado mira hasta el final. Los cofres y estrellas se ganan igual que en solitario.
+
+Pensado para niños: no hay chat ni nombres escritos; cada jugador aparece con el nombre de su personaje.
+
+### Probarlo en casa con dos teléfonos
+
+1. Instala las dependencias una vez: `npm install` (solo `ws`, para las conexiones en vivo).
+2. Arranca el servidor: `node server.mjs`.
+3. En cada teléfono, conectado a la misma Wi-Fi, abre la dirección **En tu móvil** que imprime la terminal y pulsa **🌐 Jugar en línea**. El servidor se detecta solo.
+
+Desde la versión de GitHub Pages hay que escribir la dirección del servidor en **⚙️ Servidor** (por ejemplo `192.168.1.20:5173`); se recuerda en cada dispositivo. Mientras el servidor no esté publicado en internet, el modo en línea solo funciona dentro de la misma red.
+
+Archivos: `multiplayer.mjs` (salas, códigos, relleno con robots y envío de cambios), `online.js` (conexión, réplica de la partida y suavizado en el teléfono) y `server.mjs` (sirve el juego, `/ws` para las partidas y `/health` para los servicios de alojamiento). La comprobación `node scripts/online-check.mjs "ruta/a/chrome.exe"` abre dos pestañas que juegan la misma partida.
+
 ## Archivos
 
 - `engine.js`: conquista, colisiones de punta, superposición de estelas, IA, Wall Surge, habilidades y validación del perfil.

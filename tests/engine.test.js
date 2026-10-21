@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Arena, WIDTH, SIZE, cell, coords, crossedCells, freshProfile, parseProfile, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest } from '../engine.js';
+import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest } from '../engine.js';
 import { Renderer } from '../renderer.js';
 
 function clean(arena = new Arena()) {
@@ -286,4 +286,53 @@ test('long bot simulation preserves territory counts and live-trail ownership', 
   assert.ok(captures > 5, 'bots close territory loops');
   ownershipInvariant(arena);
   for (const owner of arena.trails) if (owner >= 0) assert.ok(arena.actors[owner].alive);
+});
+
+function online(count = 3, options = {}) {
+  const humans = Array.from({ length: count }, (_, i) => ({ skin: 'tron', color: COLORS[0], name: 'Jugador ' + (i + 1) }));
+  return new Arena(freshProfile(), Math.random, { humans, ...options });
+}
+test('online matches seat several humans with distinct colors and fill the rest with bots', () => {
+  const arena = online(3);
+  assert.deepEqual(arena.actors.map(a => a.human), [true, true, true, false, false, false, false]);
+  assert.deepEqual(arena.actors.slice(0, 3).map(a => a.name), ['Jugador 1', 'Jugador 2', 'Jugador 3']);
+  assert.equal(new Set(arena.actors.map(a => a.color)).size, 7, 'colors stay distinct even when humans ask for the same one');
+  assert.ok(arena.actors.slice(0, 3).every(a => a.skin === 'tron' && a.powers.includes('dash')));
+  // Humans are never steered by the AI.
+  const before = arena.actors[1].desired; arena.actors[1].aiAt = 0; arena.step(1 / 90);
+  assert.equal(arena.actors[1].desired, before);
+});
+test('online rewards belong to the player who earned them', () => {
+  const arena = clean(online(2)), actor = arena.actors[1];
+  arena.assign(cell(10, 10), 1);
+  trail(arena, actor, [[11, 10], [12, 10]]);
+  arena.capture(actor);
+  const reward = arena.events.find(e => e.type === 'reward');
+  assert.equal(reward.id, 1); assert.ok(actor.bits > 0); assert.equal(arena.bits, 0);
+});
+test('a caught online player is out, but the match only ends when every human is out', () => {
+  const arena = clean(online(2));
+  arena.kill(arena.actors[0], arena.actors[4]);
+  assert.equal(arena.ended, false);
+  assert.ok(arena.events.some(e => e.type === 'out' && e.id === 0));
+  arena.kill(arena.actors[1], arena.actors[4]);
+  assert.equal(arena.ended, true);
+  const end = arena.events.find(e => e.type === 'end');
+  assert.equal(end.ranking.length, 7);
+});
+test('online matches end by time and rank everyone; a player who leaves becomes a bot', () => {
+  const arena = online(2, { timeLimit: 1 });
+  arena.leave(1);
+  assert.equal(arena.actors[1].human, false);
+  for (let i = 0; i < 100 && !arena.ended; i++) arena.step(1 / 90);
+  const end = arena.events.find(e => e.type === 'end');
+  assert.ok(end, 'time limit ends the match');
+  assert.equal(end.reason, '¡Se acabó el tiempo!');
+  assert.equal(end.winner, end.ranking[0]);
+});
+test('cell changes can be tracked for network deltas', () => {
+  const arena = clean(online(1));
+  arena.changes = new Set();
+  arena.assign(cell(5, 5), 0); arena.assign(cell(5, 5), 0);
+  assert.deepEqual([...arena.changes], [cell(5, 5)]);
 });

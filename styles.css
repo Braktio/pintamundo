@@ -448,3 +448,51 @@ dialog li>b { flex:none; font-size:30px; line-height:1 }
 @media(prefers-reduced-motion:reduce) {
   *,*:before,*:after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; scroll-behavior:auto!important }
 }
+
+/* ---------- Online play ---------- */
+.online-button { margin-top:6px; min-height:52px; padding:4px 22px; border:4px solid var(--ink); border-radius:18px; background:linear-gradient(#8fd4ff,#3fa6ff 55%,#1f7fe0); box-shadow:0 5px 0 var(--ink),inset 0 3px 0 #ffffff70; font:21px var(--display); color:#fff; -webkit-text-stroke:5px var(--ink); paint-order:stroke fill }
+.online-actions { display:flex; flex-direction:column; gap:12px; margin-top:14px }
+.online-actions .dialog-button { width:100% }
+.join-row { display:flex; gap:8px }
+.join-row input,.server-box input { flex:1; min-width:0; min-height:56px; padding:4px 14px; border:4px solid var(--ink); border-radius:16px; background:#fff; font:22px var(--display); color:var(--ink); text-transform:uppercase; letter-spacing:1px }
+.server-box { margin-top:14px; padding:8px 12px; border:3px solid #ffffff60; border-radius:16px; text-align:left }
+.server-box summary { cursor:pointer; font:17px var(--display) }
+.server-box input { width:100%; margin-top:8px; font:16px var(--body); font-weight:700; text-transform:none; letter-spacing:0 }
+.server-box small { display:block; margin-top:4px; font-weight:700; opacity:.85 }
+.connecting { font-size:70px; animation:bounce 1s ease-in-out infinite }
+.lobby-hint { margin:4px 0 0 }
+.room-code { display:inline-block; margin:4px 0 6px; padding:4px 22px; border:5px solid var(--ink); border-radius:20px; background:#fff; font:44px var(--display); color:var(--blue); letter-spacing:3px; box-shadow:0 5px 0 var(--ink); user-select:all }
+.lobby-players { display:grid; grid-template-columns:repeat(auto-fill,minmax(92px,1fr)); gap:8px; margin:14px 0 6px; padding:0; list-style:none }
+.lobby-players li { position:relative; display:flex; flex-direction:column; align-items:center; padding:6px 4px; border:4px solid var(--ink); border-radius:18px; background:#fff; color:var(--ink); box-shadow:0 4px 0 var(--ink); animation:pop-in .35s cubic-bezier(.2,1.6,.4,1) }
+.lobby-players li.you { background:#fff6b8 }
+.lobby-players li.empty { background:#ffffff40; border-style:dashed; color:#fff; box-shadow:none; animation:none }
+.lobby-players img { width:64px; height:64px }
+.lobby-players .robot { display:grid; place-items:center; width:64px; height:64px; font-size:40px; opacity:.7 }
+.lobby-players b { font:14px/1.1 var(--display); text-align:center }
+.lobby-players li>span:last-child:not(.robot) { position:absolute; top:-12px; right:-4px; font-size:22px }
+.lobby-status { font-size:18px }
+.lobby-status b { font:26px var(--display); color:var(--yellow); -webkit-text-stroke:5px var(--ink); paint-order:stroke fill }
+.ranking-place { margin:0; font:22px var(--display); color:var(--yellow); -webkit-text-stroke:5px var(--ink); paint-order:stroke fill }
+@media(orientation:landscape) and (max-height:560px) {
+  .screen-home h1 { display:none }
+  .home-character { grid-row:2 }
+  .online-button { grid-column:2; grid-row:3; justify-self:center; min-height:48px; font-size:19px; margin-top:10px }
+  .lobby-players { grid-template-columns:repeat(7,1fr) }
+  .lobby-players img,.lobby-players .robot { width:48px; height:48px; font-size:30px }
+  .room-code { font-size:32px }
+}
+/* Short landscape screens: dialogs must fit without scrolling to reach their buttons. */
+@media(orientation:landscape) and (max-height:560px) {
+  dialog { padding:12px 18px; max-height:94vh }
+  dialog h2 { font-size:28px; margin:0 0 4px }
+  dialog p { margin:6px 0 }
+  .dialog-buttons { margin-top:8px }
+  .dialog-button { min-height:50px; font-size:19px }
+  .lobby-hint { display:none }
+  .room-code { font-size:28px; padding:0 16px; margin:2px 0 }
+  .lobby-players { margin:8px 0 2px }
+  .lobby-players li { padding:4px 2px }
+  .lobby-status { margin:4px 0 }
+  .online-actions { gap:8px; margin-top:8px }
+  .online-actions .dialog-button,.join-row input { min-height:48px }
+}
