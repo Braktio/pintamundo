@@ -1,0 +1,485 @@
+import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, levelFor, levelXP } from './engine.js';
+import { Renderer, shade } from './renderer.js';
+
+const $ = id => document.getElementById(id);
+const SAVE_KEY = 'neon-frontier.profile.v1';
+let profile = freshProfile();
+let storageError = false;
+try { const raw = localStorage.getItem(SAVE_KEY); if (raw) profile = parseProfile(raw); }
+catch { storageError = true; }
+const renderer = new Renderer($('arena'));
+let arena = new Arena(profile), state = 'menu', hangarTab = 'skins';
+let lastFrame = performance.now(), accumulator = 0, hudClock = 0, generation = 0;
+let aim = null, keys = new Set(), sound = false, audio = null;
+let announcedUntil = 0;
+const touchSteer = { id: null, x: 0, y: 0 };
+const number = value => Math.floor(value).toLocaleString('es-CO');
+function resetJoystick() {
+  touchSteer.id = null; touchSteer.x = touchSteer.y = 0;
+  $('joystick-knob').style.transform = 'translate(-50%, -50%)';
+  $('joystick').classList.remove('engaged');
+}
+function mobileUI() {
+  if (innerHeight > innerWidth && state === 'playing') pause();
+}
+mobileUI();
+addEventListener('resize', mobileUI);
+addEventListener('orientationchange', () => { resetJoystick(); pause(); });
+async function enterFullscreen() {
+  try {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+    if (document.fullscreenElement && screen.orientation?.lock) await screen.orientation.lock('landscape');
+  } catch { /* The landscape prompt covers browsers that do not support orientation lock. */ }
+}
+$('fullscreen').onclick = async () => {
+  if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch {} }
+  else await enterFullscreen();
+};
+
+function toast(message) {
+  const el = document.createElement('div'); el.className = 'toast'; el.textContent = message;
+  $('toasts').append(el); setTimeout(() => el.remove(), 4500);
+}
+function save() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(profile)); $('save-label').textContent = 'Tu progreso está guardado'; }
+  catch { $('save-label').textContent = 'No se puede guardar aquí · usa «Guardar copia»'; }
+}
+// Cartoon sound effects: each note is [frequency, glide target, start, length, wave].
+const SOUNDS = {
+  capture: [[523, 523, 0, .12, 'square'], [659, 659, .1, .12, 'square'], [784, 784, .2, .12, 'square'], [1047, 1047, .3, .25, 'square']],
+  kill: [[220, 880, 0, .25, 'triangle'], [880, 440, .22, .2, 'triangle']],
+  death: [[392, 370, 0, .3, 'sawtooth'], [349, 330, .3, .3, 'sawtooth'], [311, 200, .6, .6, 'sawtooth']],
+  ability: [[300, 1200, 0, .3, 'sine']],
+  orb: [[880, 1760, 0, .08, 'sine']],
+  wall: [[150, 450, 0, .18, 'triangle']],
+  level: [[523, 523, 0, .1, 'square'], [659, 659, .1, .1, 'square'], [784, 784, .2, .1, 'square'], [1047, 1047, .3, .1, 'square'], [1319, 1319, .4, .35, 'square']]
+};
+function tone(kind = 'capture') {
+  if (!sound) return;
+  try {
+    audio ??= new (window.AudioContext || window.webkitAudioContext)();
+    void audio.resume();
+    for (const [from, to, delay, length, wave] of SOUNDS[kind] || SOUNDS.capture) {
+      const oscillator = audio.createOscillator(), gain = audio.createGain(), start = audio.currentTime + delay;
+      oscillator.type = wave; oscillator.frequency.setValueAtTime(from, start); oscillator.frequency.exponentialRampToValueAtTime(to, start + length);
+      gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(wave === 'sine' ? .08 : .035, start + .01); gain.gain.exponentialRampToValueAtTime(.0001, start + length);
+      oscillator.connect(gain); gain.connect(audio.destination); oscillator.start(start); oscillator.stop(start + length + .02);
+    }
+  } catch { sound = false; }
+}
+$('sound').onclick = () => {
+  sound = !sound; $('sound').setAttribute('aria-pressed', String(sound));
+  $('sound').setAttribute('aria-label', sound ? 'Desactivar sonido' : 'Activar sonido');
+  $('sound').textContent = sound ? '🔊' : '🔇'; tone('orb');
+};
+function renderEasy() {
+  $('easy').setAttribute('aria-pressed', String(profile.easy === true));
+  $('easy').title = profile.easy ? 'Modo fácil activado' : 'Modo fácil';
+  $('easy-badge').hidden = !profile.easy;
+}
+$('easy').onclick = () => {
+  profile.easy = !profile.easy; renderEasy(); save();
+  toast(profile.easy ? '🐢 Modo fácil: los robots van más despacio.' : '🐇 Modo normal: ¡los robots vuelven a correr!');
+};
+function dialog(html) {
+  keys.clear(); resetJoystick(); $('dialog-content').innerHTML = html;
+  if (!$('dialog').open) $('dialog').showModal();
+}
+function announce(text) {
+  $('announcement').textContent = text; $('announcement').hidden = false;
+  announcedUntil = performance.now() + 2200;
+}
+const playerColor = () => TRAILS.find(t => t.id === profile.trail)?.color || TRAILS[0].color;
+const skinArt = (skin, size = 112) => `<img src="${renderer.portraitURL({ skin, color: playerColor() }, size)}" alt="">`;
+const swatchArt = color => `<span class="swatch" style="--swatch:${color}"></span>`;
+const rarityChip = rarity => `<span class="rarity-chip rarity-${rarity}">${RARITIES[rarity].name}</span>`;
+const powerIcons = powers => powers.length ? powers.map(p => `<span class="power-chip" title="${POWERS[p].name}">${POWERS[p].icon} ${POWERS[p].name}</span>`).join('') : '<span class="power-chip none">Sin poderes</span>';
+const totalChests = () => Object.values(profile.chests).reduce((a, b) => a + b, 0);
+const freeChestIn = () => Math.max(0, profile.freeChestAt - Date.now());
+// Chest artwork: the same chest, tinted per chest type.
+const CHEST_COLORS = { comun: ['#7fb8ff', '#4f86e8'], raro: ['#7be05a', '#3aa316'], epico: ['#d08cff', '#9b4fe0'], legendario: ['#ffe066', '#f2a400'] };
+function chestSVG(type, size = 100) {
+  const [lid, body] = CHEST_COLORS[type];
+  return `<svg viewBox="0 0 100 90" width="${size}" height="${size * .9}" aria-hidden="true"><path d="M10 38 Q10 12 50 12 Q90 12 90 38 Z" fill="${lid}" stroke="#1c2a6e" stroke-width="5" stroke-linejoin="round"/><rect x="10" y="38" width="80" height="44" rx="8" fill="${body}" stroke="#1c2a6e" stroke-width="5"/><rect x="44" y="12" width="12" height="70" fill="#ffd23a" stroke="#1c2a6e" stroke-width="4"/><circle cx="50" cy="44" r="12" fill="#fff" stroke="#1c2a6e" stroke-width="4"/><circle cx="46" cy="44" r="3.2" fill="#1c2a6e"/><circle cx="54" cy="44" r="3.2" fill="#1c2a6e"/><path d="M22 20 q6 -4 12 -2" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" opacity=".7"/></svg>`;
+}
+const COLLECTION = {
+  skins: { icon: '🐥', title: 'Personajes', note: 'Los comunes no tienen poderes. ¡Cuanto más raro, más poderes y más rápido se recargan!' },
+  trails: { icon: '🎨', title: 'Colores', note: 'Tu color pinta tu camino y tu zona. ¡Busca más en los cofres!' },
+  powers: { icon: '⚡', title: 'Poderes', note: 'Cada personaje trae sus propios poderes. Elige uno con poderes en la pestaña Personajes.' }
+};
+function renderHangar() {
+  const content = [];
+  let owned = 0, total = 0;
+  if (hangarTab === 'skins') for (const rarity of RARITY_ORDER) {
+    const group = CHARACTERS.filter(c => c.rarity === rarity), have = group.filter(c => ownsCharacter(profile, c.id)).length;
+    total += group.length; owned += have;
+    content.push(`<h3 class="rarity-heading rarity-${rarity}">${RARITIES[rarity].name} <span>${have}/${group.length}</span></h3>`);
+    for (const c of group) {
+      const unlocked = ownsCharacter(profile, c.id);
+      const lock = c.level > 1 ? '🔒 Nivel ' + c.level + ' o cofre' : '🎁 En cofres';
+      content.push(`<article class="hangar-card card rarity-${rarity} ${unlocked ? '' : 'locked'}"><span class="card-badge">${RARITIES[rarity].name}</span><div class="card-art">${skinArt(c.id)}</div><h3>${c.name}</h3><div class="power-list">${powerIcons(c.powers)}</div><div class="card-actions"><button data-skin="${c.id}" ${unlocked ? '' : 'disabled'} class="${profile.skin === c.id ? 'equipped' : ''}">${profile.skin === c.id ? '✓ Elegido' : unlocked ? 'Elegir' : lock}</button></div></article>`);
+    }
+  }
+  if (hangarTab === 'trails') for (const trail of TRAILS) {
+    const unlocked = profile.trails.includes(trail.id); total++; owned += unlocked;
+    content.push(`<article class="hangar-card card ${unlocked ? '' : 'locked'}" style="--card-bg:linear-gradient(${shade(trail.color, .55)},${trail.color})"><span class="card-badge">${trail.rarity ? RARITIES[trail.rarity].name : '⭐'}</span><div class="card-art">${swatchArt(trail.color)}</div><h3>${trail.name}</h3><p>${trail.crate ? 'Un color especial de los cofres.' : 'Tu color de siempre.'}</p><div class="card-actions"><button data-trail="${trail.id}" ${unlocked ? '' : 'disabled'} class="${profile.trail === trail.id ? 'equipped' : ''}">${profile.trail === trail.id ? '✓ Elegido' : unlocked ? 'Elegir' : '🎁 En cofres'}</button></div></article>`);
+  }
+  if (hangarTab === 'powers') for (const [id, power] of Object.entries(POWERS)) {
+    const holders = CHARACTERS.filter(c => c.powers.includes(id)), have = holders.some(c => ownsCharacter(profile, c.id));
+    const rarities = [...new Set(holders.map(c => c.rarity))];
+    total++; owned += have;
+    content.push(`<article class="hangar-card card rarity-skill ${have ? '' : 'dim'}"><span class="card-badge">${power.duration ? power.duration + ' s' : '¡Ya!'}</span><div class="card-art"><span class="emoji">${power.icon}</span></div><h3>${power.name}</h3><p>${power.description}</p><div class="power-meta">⏱️ Recarga ${power.cooldown} s<br>${rarities.map(rarityChip).join(' ')}</div><p class="power-owner">${have ? '✓ Lo tiene un personaje tuyo' : '🎁 Búscalo en los cofres'}</p></article>`);
+  }
+  $('hangar-items').innerHTML = content.join('');
+  const info = COLLECTION[hangarTab];
+  $('collection-icon').textContent = info.icon; $('collection-title').textContent = info.title;
+  $('collection-count').textContent = `${owned}/${total}`; $('collection-note').textContent = info.note;
+}
+function renderChests() {
+  const types = Object.keys(CHESTS);
+  $('chest-inventory').innerHTML = types.map(type => `<article class="card chest-slot chest-${type}"><span class="card-badge">x${profile.chests[type]}</span><div class="card-art ${profile.chests[type] ? 'ready' : ''}">${chestSVG(type)}</div><button class="card-foot" data-open="${type}" ${profile.chests[type] ? '' : 'disabled'}>${profile.chests[type] ? '¡ABRIR!' : CHESTS[type].name}</button></article>`).join('');
+  $('chest-shop').innerHTML = types.map(type => `<article class="card chest-slot chest-${type}"><div class="card-art">${chestSVG(type)}</div><button class="card-foot" data-buy="${type}" ${profile.bits >= CHESTS[type].price ? '' : 'disabled'}>${number(CHESTS[type].price)} ⭐</button></article>`).join('');
+  $('chest-odds').innerHTML = types.map(type => `<div class="odds-row"><span class="odds-chest">${chestSVG(type, 40)}<b>${CHESTS[type].name}</b></span><span class="odds-values">${Object.entries(CHESTS[type].odds).map(([rarity, odds]) => `<span class="rarity-chip rarity-${rarity}">${RARITIES[rarity].name} ${odds}%</span>`).join('')}</span></div>`).join('');
+  renderFreeChest();
+}
+function renderFreeChest() {
+  const wait = freeChestIn(), hours = Math.floor(wait / 3600000), minutes = Math.ceil(wait % 3600000 / 60000);
+  $('free-chest').disabled = wait > 0;
+  $('free-chest-label').textContent = wait ? `⏱️ ${hours ? hours + ' h ' : ''}${minutes} min` : '¡RECLAMAR!';
+  $('free-crate-badge').hidden = !(totalChests() || !wait);
+}
+function renderMenu() {
+  const level = levelFor(profile.xp), start = levelXP(level), end = levelXP(level + 1);
+  const xpText = `${number(profile.xp - start)} / ${number(end - start)} XP`, xpWidth = Math.min(100, (profile.xp - start) / (end - start) * 100) + '%';
+  $('menu-level').textContent = level;
+  $('menu-bits').textContent = number(profile.bits);
+  $('menu-crates').textContent = totalChests();
+  $('menu-avatar').src = renderer.portraitURL({ skin: profile.skin, color: playerColor() });
+  $('home-level').textContent = level; $('home-xp-label').textContent = xpText; $('home-xp').style.width = xpWidth;
+  $('road-level').textContent = 'NIVEL ' + level; $('road-xp').textContent = xpText; $('xp-fill').style.width = xpWidth;
+  document.querySelectorAll('[data-road]').forEach(el => {
+    const unlocked = level >= Number(el.dataset.road), reward = CHARACTERS.find(c => c.level === Number(el.dataset.road));
+    el.classList.toggle('unlocked', unlocked);
+    el.querySelector('img').src = renderer.portraitURL({ skin: reward.id, color: playerColor() }, 64);
+    el.querySelector('.mission-state').textContent = unlocked ? '✓' : '🔒';
+  });
+  const next = CHARACTERS.find(c => c.level > level);
+  $('next-unlock-name').textContent = next ? `Próximo: ${next.name}` : '¡Tienes a todos los del camino!';
+  renderer.portrait($('next-unlock'), { skin: (next || characterFor(profile.skin)).id, color: playerColor() });
+  $('stat-wins').textContent = number(profile.wins); $('stat-kills').textContent = number(profile.totalKills);
+  $('stat-best').textContent = Math.round(profile.best) + '%';
+  const current = characterFor(profile.skin);
+  $('home-character').innerHTML = `${rarityChip(current.rarity)} <b>${current.name}</b> <span class="home-powers">${powerIcons(current.powers)}</span>`;
+  renderEasy(); renderChests(); renderHangar();
+}
+let screen = 'home';
+function showScreen(name) {
+  screen = name;
+  document.querySelectorAll('.screen[data-screen]').forEach(el => { el.hidden = el.dataset.screen !== name; });
+  document.querySelectorAll('.tab[data-tab]').forEach(el => el.classList.toggle('current', el.dataset.tab === name));
+  $('menu').dataset.screen = name;
+  $('play').classList.toggle('home', name !== 'home');
+  $('play-icon').textContent = name === 'home' ? '▶' : '🏠';
+  $('play').setAttribute('aria-label', name === 'home' ? '¡A jugar!' : 'Volver al inicio');
+  document.querySelector('.screens').scrollTop = 0;
+  renderMenu();
+}
+document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () => showScreen(button.dataset.tab));
+$('hangar-items').onclick = event => {
+  const button = event.target.closest('button'); if (!button || button.disabled) return;
+  if (button.dataset.skin && ownsCharacter(profile, button.dataset.skin)) profile.skin = button.dataset.skin;
+  if (button.dataset.trail) { profile.trail = button.dataset.trail; arena.actors[0].color = TRAILS.find(t => t.id === profile.trail).color; }
+  arena.actors[0].skin = profile.skin;
+  save(); renderMenu();
+};
+document.querySelectorAll('[data-hangar]').forEach(button => button.onclick = () => {
+  hangarTab = button.dataset.hangar;
+  document.querySelectorAll('[data-hangar]').forEach(b => b.classList.toggle('selected', b === button));
+  renderHangar();
+});
+// Chest opening: shake, then reveal the prize with its rarity color and powers.
+function revealChest(type) {
+  const result = openChest(profile, type), { prize, rarity, duplicate, refund } = result;
+  save(); renderMenu();
+  dialog(`<div class="crate-reward"><p class="eyebrow">${CHESTS[type].name}</p><div class="crate-opening" id="crate-spinner">${chestSVG(type, 150)}</div><p>¿Qué habrá dentro…?</p></div>`);
+  setTimeout(() => {
+    if (!$('crate-spinner')) return;
+    tone(rarity === 'legendario' || rarity === 'mitico' ? 'level' : 'capture');
+    const sparkles = Array.from({ length: 14 }, (_, i) => { const a = i / 14 * Math.PI * 2; return `<i style="--dx:${Math.round(Math.cos(a) * 160)}px;--dy:${Math.round(Math.sin(a) * 120)}px">${i % 2 ? '⭐' : '✨'}</i>`; }).join('');
+    const isCharacter = prize.type === 'skins', more = profile.chests[type];
+    const detail = duplicate ? `¡Ya lo tenías! Te damos ${refund} ⭐ a cambio.` : isCharacter ? (prize.powers.length ? '¡Nuevo personaje con poderes!' : '¡Nuevo amigo! Los comunes no tienen poderes, pero son muy simpáticos.') : '¡Ya puedes pintar con este color!';
+    $('dialog-content').innerHTML = `<div class="crate-reward reveal-${rarity}"><div class="sparkles" aria-hidden="true">${sparkles}</div><p class="rarity-banner rarity-${rarity}">¡${RARITIES[rarity].name.toUpperCase()}!</p><div class="crate-opening revealed">${isCharacter ? skinArt(prize.id, 160) : swatchArt(prize.color)}</div><h2>${prize.name}</h2>${isCharacter ? `<div class="power-list">${powerIcons(prize.powers)}</div>` : ''}<p>${detail}</p><div class="dialog-buttons">${isCharacter && !duplicate ? '<button id="equip-prize" class="dialog-button">✓ ¡Usar ahora!</button>' : ''}${more ? `<button id="open-again" class="dialog-button">🎁 Abrir otro (${more})</button>` : ''}<button id="close-crate" class="dialog-button secondary">¡GENIAL! 🎉</button></div></div>`;
+    $('close-crate').onclick = () => { $('dialog').close(); renderMenu(); };
+    if ($('equip-prize')) $('equip-prize').onclick = () => { profile.skin = prize.id; save(); $('dialog').close(); renderMenu(); toast(`¡Ahora juegas con ${prize.name}!`); };
+    if ($('open-again')) $('open-again').onclick = () => { profile.chests[type]--; revealChest(type); };
+  }, 1500);
+}
+$('chest-inventory').onclick = event => {
+  const button = event.target.closest('[data-open]'); if (!button || button.disabled) return;
+  const type = button.dataset.open; if (!profile.chests[type]) return;
+  profile.chests[type]--; revealChest(type);
+};
+$('chest-shop').onclick = event => {
+  const button = event.target.closest('[data-buy]'); if (!button || button.disabled) return;
+  const type = button.dataset.buy; if (profile.bits < CHESTS[type].price) return;
+  profile.bits -= CHESTS[type].price; revealChest(type);
+};
+$('free-chest').onclick = () => {
+  if (freeChestIn() > 0) return;
+  profile.freeChestAt = Date.now() + FREE_CHEST_HOURS * 3600000; revealChest('comun');
+};
+setInterval(() => { if (state === 'menu') renderFreeChest(); }, 30000);
+
+function start() {
+  generation++; arena = new Arena(profile); state = 'playing'; accumulator = 0; aim = null; keys.clear(); resetJoystick();
+  renderer.camera = { x: arena.actors[0].x, y: arena.actors[0].y };
+  renderer.particles = []; renderer.floats = []; renderer.rings = []; renderer.brokenTrails = [];
+  document.body.classList.add('in-match');
+  if (matchMedia('(pointer: coarse)').matches) void enterFullscreen();
+  $('menu').hidden = true; $('hud').hidden = false;
+  $('dialog').close(); $('arena').focus({ preventScroll: true });
+  document.documentElement.style.setProperty('--player', arena.actors[0].color);
+  $('pilot-avatar').src = renderer.portraitURL(arena.actors[0]);
+  $('leaders').innerHTML = arena.actors.map(actor => `<li data-actor="${actor.id}" class="${actor.id ? '' : 'me'}" style="--actor:${actor.color}"><img src="${renderer.portraitURL(actor)}" alt="${actor.name}"><i></i><b>0%</b></li>`).join('');
+  announce('¡A PINTAR! 🎨'); renderHUD();
+}
+$('play').onclick = () => { if (screen === 'home') start(); else showScreen('home'); };
+function menu() {
+  generation++; state = 'menu'; keys.clear(); aim = null; resetJoystick();
+  $('dialog').close(); $('menu').hidden = false; $('hud').hidden = true;
+  document.body.classList.remove('in-match');
+  arena = new Arena(profile); renderMenu(); save();
+}
+function end(won, reason) {
+  if (state !== 'playing' && state !== 'paused') return;
+  state = 'ending'; keys.clear();
+  resetJoystick(); renderHUD();
+  const player = arena.actors[0], percent = arena.best / SIZE * 100;
+  profile.best = Math.max(profile.best, percent);
+  // Match reward: 1 star → common chest, 2 stars → rare chest, a win → epic chest.
+  const stars = won ? 3 : percent >= 20 ? 2 : percent >= 6 || player.kills ? 1 : 0;
+  const prizeChest = [null, 'comun', 'raro', 'epico'][stars];
+  if (won) profile.wins++;
+  if (prizeChest) profile.chests[prizeChest]++;
+  save();
+  const currentGeneration = generation;
+  setTimeout(() => {
+    if (currentGeneration !== generation) return;
+    state = 'results';
+    const title = won ? '¡GANASTE! 🏆' : stars >= 2 ? '¡Muy bien!' : stars ? '¡Buen intento!' : '¡Casi lo tienes!';
+    dialog(`<p class="eyebrow">${won ? '¡Pintaste más de la mitad!' : 'Fin de la partida'}</p><div class="result-stars" aria-label="${stars} de 3 estrellas">${[0, 1, 2].map(i => `<span class="${i < stars ? '' : 'off'}">⭐</span>`).join('')}</div><h2>${title}</h2><p>${won ? '¡El mapa es de tu color!' : reason}</p><div class="results"><div><strong>${Math.round(percent)}%</strong><small>🎨 Pintado</small></div><div><strong>${player.kills}</strong><small>🎯 Atrapados</small></div><div><strong>+${number(arena.bits)}</strong><small>⭐ Estrellas</small></div></div><p>+${number(arena.xp)} XP · Nivel ${levelFor(profile.xp)}</p>${prizeChest ? `<div class="prize-chest chest-${prizeChest}">${chestSVG(prizeChest, 64)}<b>¡Ganaste un ${CHESTS[prizeChest].name}!</b></div>` : '<p>Pinta un poco más para ganar un cofre 🎁</p>'}<div class="dialog-buttons"><button class="dialog-button" id="retry">¡OTRA VEZ! ▶</button><button class="dialog-button secondary" id="to-menu">🏠 Menú</button></div>`);
+    tone(won ? 'level' : stars ? 'capture' : 'death');
+    $('retry').onclick = start; $('to-menu').onclick = menu;
+  }, 750);
+}
+function pause() {
+  if (state !== 'playing') return;
+  state = 'paused'; keys.clear();
+  dialog('<p class="eyebrow">⏸ Pausa</p><h2>¡Un descanso!</h2><p>El juego te espera. Tus estrellas ya están guardadas.</p><div class="dialog-buttons"><button id="resume" class="dialog-button">▶ SEGUIR JUGANDO</button><button id="abandon" class="dialog-button secondary">🏁 Terminar</button></div>');
+  $('resume').onclick = () => { $('dialog').close(); state = 'playing'; $('arena').focus({ preventScroll: true }); };
+  $('abandon').onclick = () => { $('dialog').close(); arena.ended = true; end(false, 'Terminaste la partida. ¡Vuelve cuando quieras!'); };
+}
+$('pause').onclick = pause;
+document.addEventListener('visibilitychange', () => { if (document.hidden) { pause(); save(); } });
+addEventListener('blur', () => { keys.clear(); pause(); });
+addEventListener('pagehide', save);
+setInterval(save, 10000);
+
+function activate(slot) {
+  if (state !== 'playing') return;
+  const power = arena.actors[0].powers[slot];
+  if (power && arena.ability(0, power)) renderHUD();
+}
+document.querySelectorAll('[data-slot].ability').forEach(button => {
+  button.onclick = () => activate(Number(button.dataset.slot));
+  button.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'touch' || event.pointerType === 'pen') {
+      event.preventDefault(); activate(Number(button.dataset.slot));
+    }
+  });
+});
+document.addEventListener('keydown', event => {
+  if (event.code === 'Escape') {
+    if (state === 'playing') { event.preventDefault(); pause(); }
+    else if (state === 'paused') { event.preventDefault(); $('resume')?.click(); }
+    else if ($('dialog').open) {
+      event.preventDefault();
+      $('dialog').dispatchEvent(new Event('cancel', { cancelable: true }));
+    }
+    return;
+  }
+  if (state !== 'playing') return;
+  if (['Space', 'ShiftLeft', 'ShiftRight'].includes(event.code)) {
+    event.preventDefault(); if (!event.repeat) activate(event.code === 'Space' ? 0 : 1); return;
+  }
+  if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) { event.preventDefault(); keys.add(event.code); aim = null; }
+});
+document.addEventListener('keyup', event => keys.delete(event.code));
+function pointer(event) {
+  if (state !== 'playing') return;
+  aim = { x: event.clientX, y: event.clientY };
+}
+$('arena').addEventListener('pointermove', pointer);
+$('arena').addEventListener('pointerdown', event => {
+  pointer(event); $('arena').setPointerCapture(event.pointerId);
+});
+function updateJoystick(event) {
+  const bounds = $('joystick').getBoundingClientRect();
+  const radius = bounds.width * .34;
+  const dx = event.clientX - bounds.left - bounds.width / 2;
+  const dy = event.clientY - bounds.top - bounds.height / 2;
+  const distance = Math.hypot(dx, dy), factor = Math.min(1, radius / (distance || 1));
+  touchSteer.x = dx * factor / radius; touchSteer.y = dy * factor / radius;
+  $('joystick-knob').style.transform = `translate(calc(-50% + ${dx * factor}px), calc(-50% + ${dy * factor}px))`;
+}
+$('joystick').addEventListener('pointerdown', event => {
+  if (state !== 'playing' || touchSteer.id !== null) return;
+  event.preventDefault();
+  touchSteer.id = event.pointerId; aim = null;
+  $('joystick').setPointerCapture(event.pointerId);
+  $('joystick').classList.add('engaged'); updateJoystick(event);
+});
+$('joystick').addEventListener('pointermove', event => {
+  if (event.pointerId !== touchSteer.id) return;
+  event.preventDefault(); updateJoystick(event);
+});
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  $('joystick').addEventListener(type, event => { if (event.pointerId === touchSteer.id) resetJoystick(); });
+}
+function steer() {
+  const player = arena.actors[0];
+  arena.wallRange = 40 / renderer.scale;
+  if (touchSteer.id !== null && Math.hypot(touchSteer.x, touchSteer.y) > .16) {
+    // Invert the projected direction so the stick follows the screen, not grid axes.
+    const head = renderer.project(player.x, player.y);
+    const target = renderer.unproject(head.x + touchSteer.x * 80, head.y + touchSteer.y * 80);
+    player.desired = Math.atan2(target.y - player.y, target.x - player.x);
+    return;
+  }
+  const x = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft'));
+  const y = Number(keys.has('KeyS') || keys.has('ArrowDown')) - Number(keys.has('KeyW') || keys.has('ArrowUp'));
+  if (x || y) player.desired = Math.atan2(y, x);
+  else if (aim) {
+    const world = renderer.unproject(aim.x, aim.y);
+    if (Math.hypot(world.x - player.x, world.y - player.y) > .8) player.desired = Math.atan2(world.y - player.y, world.x - player.x);
+  }
+}
+function processEvents() {
+  for (const event of arena.events.splice(0)) {
+    if (event.type === 'death' && event.killer === 0 && arena.actors[event.id].name === profile.nemesis) { event.revenge = true; profile.nemesis = ''; }
+    renderer.effects(event, arena);
+    if (event.type === 'reward') {
+      const oldLevel = levelFor(profile.xp);
+      profile.bits += event.bits; profile.xp += event.xp; profile.totalKills += event.kills;
+      // Each new level gives a rare chest; every fifth level a legendary one.
+      if (levelFor(profile.xp) > oldLevel) {
+        const level = levelFor(profile.xp), type = level % 5 === 0 ? 'legendario' : 'raro';
+        profile.chests[type]++;
+        announce(`🎉 ¡NIVEL ${level}! +🎁`); toast(`🎁 ¡Ganaste un ${CHESTS[type].name} por subir al nivel ${level}!`); tone('level');
+      }
+      save();
+    }
+    if (event.type === 'death') {
+      if (event.id === 0 && event.killer >= 0) profile.nemesis = arena.actors[event.killer].name;
+      if (event.id === 0) tone('death'); else if (event.killer === 0) tone('kill');
+    }
+    if (event.type === 'capture' && event.id === 0 && event.cells) tone();
+    if (event.type === 'ability' && event.id === 0) tone('ability');
+    if (event.type === 'orb' && event.id === 0) tone('orb');
+    if (event.type === 'end') end(event.won, event.reason);
+  }
+}
+let wasSurging = false;
+function renderHUD() {
+  const player = arena.actors[0], percent = player.count / SIZE * 100;
+  $('hud-territory').textContent = Math.round(percent) + '%';
+  $('goal-fill').style.width = Math.min(100, percent / 50 * 100) + '%';
+  $('hud-kills').textContent = player.kills; $('hud-bits').textContent = number(arena.bits);
+  document.querySelectorAll('[data-milestone]').forEach(el => {
+    const reached = percent >= Number(el.dataset.milestone);
+    if (reached && !el.classList.contains('reached') && state === 'playing') announce(`⭐ ¡${el.dataset.milestone}%! ⭐`);
+    el.classList.toggle('reached', reached);
+  });
+  $('danger').hidden = !player.trail.length || !player.alive;
+  $('wall-boost').hidden = !player.wallSurge || !player.alive;
+  if (player.wallSurge && !wasSurging && state === 'playing') tone('wall');
+  wasSurging = player.wallSurge;
+  const score = actor => actor.count * 20 + actor.kills * 1000;
+  // Rows are built once per match; here they are only reordered, so avatars never flicker.
+  const ranked = arena.actors.filter(a => a.alive).sort((a, b) => score(b) - score(a));
+  for (const row of $('leaders').children) {
+    const actor = arena.actors[row.dataset.actor], rank = ranked.indexOf(actor);
+    row.hidden = rank < 0 || (rank > 2 && actor.id !== 0);
+    row.style.order = rank; row.classList.toggle('leader', rank === 0);
+    row.querySelector('i').textContent = rank + 1;
+    row.querySelector('b').textContent = Math.round(actor.count / SIZE * 100) + '%';
+  }
+  // One button per power of the current character; commons show no buttons at all.
+  for (const slot of [0, 1]) {
+    const id = player.powers[slot], button = $('slot-' + slot);
+    button.hidden = !id; if (!id) continue;
+    const power = POWERS[id], remaining = Math.max(0, (player.ready[id] || 0) - arena.time), active = arena.active(player, id);
+    $('slot-name-' + slot).textContent = power.name;
+    $('slot-icon-' + slot).textContent = power.icon;
+    $('slot-state-' + slot).textContent = active ? '¡ACTIVO!' : remaining ? Math.ceil(remaining) + ' s' : '¡YA!';
+    $('slot-meter-' + slot).style.setProperty('--ready', 1 - remaining / arena.cooldown(player, id));
+    button.disabled = remaining > 0 || !player.alive;
+    button.classList.toggle('active', active);
+    button.classList.toggle('ready', !remaining);
+  }
+  $('no-powers').hidden = player.powers.length > 0;
+  const c = $('minimap').getContext('2d');
+  c.clearRect(0, 0, 168, 144); c.fillStyle = '#ecfbf6'; c.fillRect(0, 0, 168, 144);
+  for (let i = 0; i < SIZE; i++) if (arena.grid[i] >= 0) { c.fillStyle = arena.actors[arena.grid[i]].color + 'aa'; c.fillRect(i % WIDTH * 2, Math.floor(i / WIDTH) * 2, 2, 2); }
+  for (const actor of arena.actors) if (actor.alive) {
+    c.strokeStyle = actor.color; c.lineWidth = 2; c.beginPath();
+    actor.trail.forEach((index, i) => { const x = (index % WIDTH + .5) * 2, y = (Math.floor(index / WIDTH) + .5) * 2; if (i) c.lineTo(x, y); else c.moveTo(x, y); }); c.stroke();
+    c.fillStyle = actor.color; c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.beginPath(); c.arc(actor.x * 2, actor.y * 2, actor.id ? 4 : 6, 0, Math.PI * 2); c.fill(); c.stroke();
+  }
+}
+
+function showHelp() {
+  dialog(`<p class="eyebrow">📖 Cómo se juega</p><h2>¡Pinta el mapa!</h2><ul><li><b>🕹️</b><span>Muévete con el joystick o arrastrando el dedo. Tu personaje sigue avanzando solo.</span></li><li><b>🖌️</b><span>Sal de tu zona: dejarás un camino de pintura. Vuelve a casa y se pintará todo lo de dentro.</span></li><li><b>⚠️</b><span>Si un robot toca tu camino mientras estás fuera, ¡te atrapa! Tocar el tuyo o chocar con otros no pasa nada.</span></li><li><b>🎯</b><span>Toca el camino de un robot para atraparlo y quedarte con parte de su zona.</span></li><li><b>⭐</b><span>Recoge estrellas: te dan puntos y hacen más grande tu próxima zona.</span></li><li><b>⚡</b><span>Cerca de la valla vas más rápido.</span></li><li><b>🐥</b><span>Cada personaje es distinto: los comunes no tienen poderes; los raros, épicos, legendarios y míticos traen poderes como disparar, correr más o pintar sin volver a casa. Úsalos con los botones de la derecha y espera a que se recarguen.</span></li><li><b>🎁</b><span>Gana cofres al terminar una partida, al subir de nivel y cada 4 horas gratis. ¡Dentro hay personajes y colores nuevos!</span></li><li><b>🏆</b><span>¡Pinta más de la mitad del mapa para ganar un cofre épico!</span></li></ul><p>¿Te parece difícil? Activa el modo fácil 🐢 en el menú.</p><div class="dialog-buttons"><button id="close-help" class="dialog-button">¡ENTENDIDO! 👍</button></div>`);
+  $('close-help').onclick = () => $('dialog').close();
+}
+document.querySelectorAll('[data-help]').forEach(button => button.onclick = showHelp);
+$('dialog').addEventListener('cancel', event => {
+  event.preventDefault();
+  if (state === 'paused') $('resume')?.click();
+  else if (state === 'results') menu();
+  else if (!$('crate-spinner')) $('dialog').close();
+});
+$('export').onclick = () => {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a'); link.href = url; link.download = 'pintamundo-progreso.json'; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000); toast('💾 ¡Copia guardada!');
+};
+$('import').onclick = () => $('import-file').click();
+$('import-file').onchange = async event => {
+  const file = event.target.files[0]; if (!file) return;
+  try {
+    if (file.size > 100000) throw new Error('Archivo demasiado grande');
+    const candidate = parseProfile(await file.text());
+    dialog(`<p class="eyebrow">📂 Cargar copia</p><h2>Jugador de nivel ${levelFor(candidate.xp)}</h2><p>${number(candidate.bits)} ⭐. Esta copia reemplazará tu progreso actual. Pídele ayuda a un adulto si no estás seguro.</p><div class="dialog-buttons"><button id="confirm-import" class="dialog-button">Sí, cargar</button><button id="cancel-import" class="dialog-button secondary">Cancelar</button></div>`);
+    $('confirm-import').onclick = () => { profile = candidate; menu(); toast('📂 ¡Progreso cargado!'); };
+    $('cancel-import').onclick = () => $('dialog').close();
+  } catch { toast('Ese archivo no sirve. Tu progreso sigue igual.'); }
+  event.target.value = '';
+};
+
+function frame(time) {
+  const dt = Math.max(0, Math.min(.08, (time - lastFrame) / 1000)); lastFrame = time;
+  if (state === 'playing') {
+    accumulator += dt; steer();
+    // A bounded fixed step keeps trail traversal and bot decisions frame-rate independent.
+    while (accumulator >= 1 / 90 && state === 'playing') { arena.step(1 / 90); processEvents(); accumulator -= 1 / 90; }
+    hudClock += dt; if (hudClock > .1) { renderHUD(); hudClock = 0; }
+  }
+  // The menu is opaque: skip the arena and animate only the mascot on the home screen.
+  if (!document.hidden && state !== 'menu') renderer.draw(arena, time / 1000, dt);
+  else if (!document.hidden && screen === 'home') renderer.portrait($('mascot'), { skin: profile.skin, color: playerColor() }, time / 1000, { idle: true });
+  if (time > announcedUntil) $('announcement').hidden = true;
+  requestAnimationFrame(frame);
+}
+showScreen('home'); requestAnimationFrame(frame);
+if (storageError) toast('No se pudo cargar tu progreso. Puedes cargar una copia guardada.');

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2d7bff">
+  <meta name="description" content="¡Pinta el mundo de tu color! Dibuja caminos, vuelve a casa y llena el mapa con tu pintura.">
+  <title>Pintamundo · ¡Pinta el mapa!</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Lilita+One&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <canvas id="arena" aria-label="Mapa de juego para pintar" tabindex="0"></canvas>
+  <div id="hud" hidden>
+    <div class="hud-left">
+      <div class="match-controls"><button id="pause" class="round-button" aria-label="Pausar partida">⏸</button><button id="fullscreen" class="round-button" aria-label="Pantalla completa">⛶</button></div>
+      <div class="pilot-badge"><img id="pilot-avatar" alt=""><strong id="pilot-name">Tú</strong></div>
+      <div class="stat-pill"><span aria-hidden="true">⭐</span><b id="hud-bits">0</b></div>
+      <div class="stat-pill"><span aria-hidden="true">🎯</span><b id="hud-kills">0</b></div>
+    </div>
+    <div class="goal-bar" aria-label="Meta: pintar la mitad del mapa">
+      <div class="goal-track"><i id="goal-fill"></i><b id="hud-territory">0%</b></div>
+      <span class="milestone" data-milestone="10" style="--at:20%">⭐</span><span class="milestone" data-milestone="20" style="--at:40%">⭐</span><span class="milestone" data-milestone="30" style="--at:60%">⭐</span><span class="milestone" data-milestone="40" style="--at:80%">⭐</span>
+      <span class="goal-trophy" aria-hidden="true">🏆</span>
+    </div>
+    <div id="wall-boost" class="wall-boost" hidden>⚡ ¡TURBO DE PARED!</div>
+    <ol id="leaders" class="leaderboard" aria-label="Ranking"></ol>
+    <div class="map-panel"><canvas id="minimap" width="168" height="144" aria-label="Minimapa de zonas"></canvas></div>
+    <div class="abilities">
+      <button id="slot-0" class="ability" data-slot="0"><span class="ability-ring" id="slot-meter-0"></span><span class="ability-icon" id="slot-icon-0">🚀</span><strong id="slot-name-0">Turbo</strong><small id="slot-state-0">¡YA!</small></button>
+      <button id="slot-1" class="ability" data-slot="1"><span class="ability-ring" id="slot-meter-1"></span><span class="ability-icon" id="slot-icon-1">🛡️</span><strong id="slot-name-1">Burbuja</strong><small id="slot-state-1">¡YA!</small></button>
+      <div id="no-powers" class="no-powers" hidden>Sin poderes<br><small>¡Busca personajes raros en los cofres!</small></div>
+    </div>
+    <div id="announcement" class="announcement" hidden></div>
+    <div id="danger" class="danger" hidden>🏠 ¡VUELVE A CASA!</div>
+    <div id="joystick" class="joystick" role="group" aria-label="Joystick táctil para moverte"><span id="joystick-knob" class="joystick-knob" aria-hidden="true"></span></div>
+  </div>
+  <aside id="rotate-prompt" class="rotate-prompt"><span class="rotate-phone" aria-hidden="true">📱</span><h2 class="outlined">¡Gira el teléfono!</h2><p>Pintamundo se juega de lado.<br>Usa tus dos pulgares.</p></aside>
+  <main id="menu" class="menu">
+    <header class="topbar">
+      <button class="level-badge" data-tab="progress" aria-label="Ver mi progreso"><img id="menu-avatar" alt=""><span id="menu-level">1</span></button>
+      <div class="currency"><span class="currency-icon" aria-hidden="true">⭐</span><strong id="menu-bits">0</strong></div>
+      <div class="currency"><span class="currency-icon" aria-hidden="true">🎁</span><strong id="menu-crates">0</strong></div>
+      <div class="topbar-actions">
+        <button id="easy" class="round-button" aria-pressed="false" aria-label="Modo fácil" title="Modo fácil">🐢</button>
+        <button id="sound" class="round-button" aria-pressed="false" aria-label="Activar sonido">🔇</button>
+      </div>
+    </header>
+    <div class="screens">
+      <section class="screen screen-home" data-screen="home">
+        <div class="home-level"><span class="outlined">Nivel <b id="home-level">1</b></span><div class="home-bar"><i id="home-xp"></i><b id="home-xp-label">0 / 200 XP</b></div></div>
+        <div class="island"><canvas id="mascot" aria-hidden="true"></canvas></div>
+        <button class="home-character" id="home-character" data-tab="collection" aria-label="Cambiar de personaje"></button>
+        <h1 class="outlined">¡Pinta el mundo<br>de tu color!</h1>
+        <p class="home-tip">Sal de tu zona, dibuja un camino y vuelve a casa. ¡Que nadie toque tu camino!</p>
+        <div class="home-side left"><button class="side-badge" id="help-side" data-help><span>❓</span><b>Cómo<br>jugar</b></button></div>
+        <div class="home-side right"><button class="side-badge" data-tab="crates" id="free-crate-badge" hidden><span>🎁</span><b>¡Abre tus<br>cofres!</b></button><span class="side-badge easy-badge" id="easy-badge" hidden><span>🐢</span><b>Modo<br>fácil</b></span></div>
+      </section>
+      <section class="screen screen-crates" data-screen="crates" hidden>
+        <div class="awning" aria-hidden="true"></div>
+        <h2 class="ribbon pink"><span class="ribbon-icon" aria-hidden="true">🎁</span>Tus cofres</h2>
+        <div id="chest-inventory" class="card-grid chest-grid"></div>
+        <article class="card free-chest-card">
+          <div class="free-chest-art" aria-hidden="true">⏰</div>
+          <p class="card-copy">¡Un cofre común gratis cada 4 horas!</p>
+          <button id="free-chest" class="card-foot"><span id="free-chest-label">¡RECLAMAR!</span></button>
+        </article>
+        <h2 class="ribbon yellow"><span class="ribbon-icon" aria-hidden="true">⭐</span>Cambia tus estrellas</h2>
+        <div id="chest-shop" class="card-grid chest-grid"></div>
+        <h2 class="ribbon blue"><span class="ribbon-icon" aria-hidden="true">🎲</span>¿Qué puede salir?</h2>
+        <div id="chest-odds" class="odds"></div>
+        <p class="screen-note">Las estrellas se ganan jugando. Si te sale un premio repetido, te damos estrellas a cambio.</p>
+      </section>
+      <section class="screen screen-collection" data-screen="collection" hidden>
+        <div class="segmented hangar-tabs"><button class="selected" data-hangar="skins">🐥 Personajes</button><button data-hangar="trails">🎨 Colores</button><button data-hangar="powers">⚡ Poderes</button></div>
+        <h2 class="ribbon blue"><span class="ribbon-icon" aria-hidden="true" id="collection-icon">🐥</span><span id="collection-title">Personajes</span><span class="ribbon-count" id="collection-count">1/37</span></h2>
+        <p class="screen-note" id="collection-note"></p>
+        <div id="hangar-items" class="card-grid hangar-items"></div>
+      </section>
+      <section class="screen screen-progress" data-screen="progress" hidden>
+        <div class="pedestal-wrap"><div class="pedestal-bar"><b id="road-level">NIVEL 1</b><div class="xp-track"><i id="xp-fill"></i><span id="road-xp">0 / 200 XP</span></div></div><div class="pedestal"><canvas id="next-unlock" aria-hidden="true"></canvas></div><p class="outlined pedestal-caption" id="next-unlock-name">Próximo: Gato Rayo</p></div>
+        <div class="panel-blue">
+          <h2 class="panel-heading">🧭 Mapa de aventura</h2>
+          <div class="road"><div class="mission" data-road="2"><img alt=""><div><strong>Llega al nivel 2</strong><span>Gato Rayo</span></div><b class="mission-state">🔒</b></div><div class="mission" data-road="5"><img alt=""><div><strong>Llega al nivel 5</strong><span>Platillo Zum</span></div><b class="mission-state">🔒</b></div><div class="mission" data-road="10"><img alt=""><div><strong>Llega al nivel 10</strong><span>Dragoncito</span></div><b class="mission-state">🔒</b></div></div>
+          <h2 class="panel-heading">🏅 Tus récords</h2>
+          <div class="stats"><div><b id="stat-wins">0</b><span>🏆 Victorias</span></div><div><b id="stat-kills">0</b><span>🎯 Atrapados</span></div><div><b id="stat-best">0%</b><span>🎨 Mejor zona</span></div></div>
+          <footer><span><span class="live-dot"></span> <span id="save-label">Tu progreso se guarda solo</span></span><button id="export">💾 Guardar copia</button><button id="import">📂 Cargar copia</button><input type="file" accept=".json,application/json" id="import-file" hidden></footer>
+        </div>
+      </section>
+    </div>
+    <nav class="tabbar" aria-label="Menú principal">
+      <button class="tab" data-tab="crates"><span>🎁</span><b>Cofres</b></button>
+      <button class="tab" data-tab="collection"><span>🐥</span><b>Colección</b></button>
+      <button id="play" class="play-button" aria-label="¡A jugar!"><span id="play-icon">▶</span></button>
+      <button class="tab" data-tab="progress"><span>🧭</span><b>Progreso</b></button>
+      <button id="help" class="tab" data-help><span>❓</span><b>Ayuda</b></button>
+    </nav>
+  </main>
+  <dialog id="dialog"><div id="dialog-content"></div></dialog>
+  <div id="toasts" aria-live="polite" role="status"></div>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
