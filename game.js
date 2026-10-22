@@ -34,16 +34,22 @@ function mobileUI() {
 mobileUI();
 addEventListener('resize', mobileUI);
 addEventListener('orientationchange', () => { resetJoystick(); pause(); });
+// Safari on iPad only has the prefixed API; Safari on iPhone has none at all.
+const root = document.documentElement;
+const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+const canFullscreen = !!(root.requestFullscreen || root.webkitRequestFullscreen);
 async function enterFullscreen() {
   try {
-    if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
-    if (document.fullscreenElement && screen.orientation?.lock) await screen.orientation.lock('landscape');
+    if (!fullscreenElement()) await (root.requestFullscreen ? root.requestFullscreen() : root.webkitRequestFullscreen());
+    if (fullscreenElement() && screen.orientation?.lock) await screen.orientation.lock('landscape');
   } catch { /* The landscape prompt covers browsers that do not support orientation lock. */ }
 }
-// Inside the Android app the game is already full screen and locked to landscape.
-if (globalThis.Capacitor?.isNativePlatform?.()) $('fullscreen').hidden = true;
+// Inside the Android app, or opened from the home screen, the game is already full screen.
+const standalone = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone === true;
+if (globalThis.Capacitor?.isNativePlatform?.() || standalone) $('fullscreen').hidden = true;
 $('fullscreen').onclick = async () => {
-  if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch {} }
+  if (!canFullscreen) { toast('En iPhone: pulsa Compartir ⬆️ → «Añadir a pantalla de inicio» y abre el juego desde su icono para jugar en pantalla completa.'); return; }
+  if (fullscreenElement()) { try { await (document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen()); } catch {} }
   else await enterFullscreen();
 };
 
@@ -214,21 +220,45 @@ document.querySelectorAll('[data-hangar]').forEach(button => button.onclick = ()
   renderHangar();
 });
 // Chest opening: shake, then reveal the prize with its rarity color and powers.
-function revealChest(type) {
+// `sequence` ({ left, next, actions, wire, gen }) is used after a match: each reveal moves on to
+// the next chest by itself, and the last one shows the match buttons instead of "close".
+function revealChest(type, sequence = null) {
   const result = openChest(profile, type), { prize, rarity, duplicate, refund } = result;
   save(true); renderMenu();
   dialog(`<div class="crate-reward"><p class="eyebrow">${CHESTS[type].name}</p><div class="crate-opening" id="crate-spinner">${chestSVG(type, 150)}</div><p>¿Qué habrá dentro…?</p></div>`);
   setTimeout(() => {
-    if (!$('crate-spinner')) return;
+    if (!$('crate-spinner') || (sequence && generation !== sequence.gen)) return;
     tone(rarity === 'legendario' || rarity === 'mitico' ? 'level' : 'capture');
     const sparkles = Array.from({ length: 14 }, (_, i) => { const a = i / 14 * Math.PI * 2; return `<i style="--dx:${Math.round(Math.cos(a) * 160)}px;--dy:${Math.round(Math.sin(a) * 120)}px">${i % 2 ? '⭐' : '✨'}</i>`; }).join('');
     const isCharacter = prize.type === 'skins', more = profile.chests[type];
     const detail = duplicate ? `¡Ya lo tenías! Te damos ${refund} ⭐ a cambio.` : isCharacter ? (prize.powers.length ? '¡Nuevo personaje con poderes!' : '¡Nuevo amigo! Los comunes no tienen poderes, pero son muy simpáticos.') : '¡Ya puedes pintar con este color!';
-    $('dialog-content').innerHTML = `<div class="crate-reward reveal-${rarity}"><div class="sparkles" aria-hidden="true">${sparkles}</div><p class="rarity-banner rarity-${rarity}">¡${RARITIES[rarity].name.toUpperCase()}!</p><div class="crate-opening revealed">${isCharacter ? skinArt(prize.id, 160) : swatchArt(prize.color)}</div><h2>${prize.name}</h2>${isCharacter ? `<div class="power-list">${powerIcons(prize.powers)}</div>` : ''}<p>${detail}</p><div class="dialog-buttons">${isCharacter && !duplicate ? '<button id="equip-prize" class="dialog-button">✓ ¡Usar ahora!</button>' : ''}${more ? `<button id="open-again" class="dialog-button">🎁 Abrir otro (${more})</button>` : ''}<button id="close-crate" class="dialog-button secondary">¡GENIAL! 🎉</button></div></div>`;
+    $('dialog-content').innerHTML = `<div class="crate-reward reveal-${rarity}"><div class="sparkles" aria-hidden="true">${sparkles}</div><p class="rarity-banner rarity-${rarity}">¡${RARITIES[rarity].name.toUpperCase()}!</p><div class="crate-opening revealed">${isCharacter ? skinArt(prize.id, 160) : swatchArt(prize.color)}</div><h2>${prize.name}</h2>${isCharacter ? `<div class="power-list">${powerIcons(prize.powers)}</div>` : ''}<p>${detail}</p><div class="dialog-buttons">${isCharacter && !duplicate ? '<button id="equip-prize" class="dialog-button">✓ ¡Usar ahora!</button>' : ''}${sequence ? (sequence.next ? `<button id="next-chest" class="dialog-button">🎁 Siguiente (${sequence.left})</button>` : '') : `${more ? `<button id="open-again" class="dialog-button">🎁 Abrir otro (${more})</button>` : ''}<button id="close-crate" class="dialog-button secondary">¡GENIAL! 🎉</button>`}</div>${sequence && !sequence.next ? sequence.actions : ''}</div>`;
+    if (sequence) {
+      // The next chest opens by itself after a moment; choosing a character waits for a tap.
+      let advance = 0;
+      if (sequence.next) {
+        $('next-chest').onclick = () => { clearTimeout(advance); sequence.next(); };
+        advance = setTimeout(() => { if ($('next-chest') && generation === sequence.gen) sequence.next(); }, 3500);
+      } else sequence.wire();
+      if ($('equip-prize')) $('equip-prize').onclick = () => {
+        clearTimeout(advance); profile.skin = prize.id; save();
+        $('equip-prize').textContent = '✓ Elegido'; $('equip-prize').disabled = true;
+      };
+      return;
+    }
     $('close-crate').onclick = () => { $('dialog').close(); renderMenu(); };
     if ($('equip-prize')) $('equip-prize').onclick = () => { profile.skin = prize.id; save(); $('dialog').close(); renderMenu(); toast(`¡Ahora juegas con ${prize.name}!`); };
     if ($('open-again')) $('open-again').onclick = () => { profile.chests[type]--; revealChest(type); };
   }, 1500);
+}
+// Chests won during a match ({ type, reason }), opened one after another when it ends.
+let matchChests = [];
+function openEarned(queue, actions, wire, gen) {
+  const { type } = queue.shift();
+  const next = queue.length ? () => openEarned(queue, actions, wire, gen) : null;
+  if (!profile.chests[type]) { if (next) next(); return; }
+  profile.chests[type]--;
+  revealChest(type, { left: queue.length, next, actions, wire, gen });
 }
 $('chest-inventory').onclick = event => {
   const button = event.target.closest('[data-open]'); if (!button || button.disabled) return;
@@ -255,6 +285,7 @@ function start() {
 function enterMatch() {
   renderer.camera = { x: arena.actors[0].x, y: arena.actors[0].y };
   renderer.particles = []; renderer.floats = []; renderer.rings = []; renderer.brokenTrails = [];
+  matchChests = [];
   document.body.classList.add('in-match');
   if (matchMedia('(pointer: coarse)').matches) void enterFullscreen();
   $('menu').hidden = true; $('hud').hidden = false;
@@ -309,18 +340,29 @@ function end(won, reason, ranking = null) {
   const stars = won ? 3 : percent >= 20 ? 2 : percent >= 6 || player.kills ? 1 : 0;
   const prizeChest = [null, 'comun', 'raro', 'epico'][stars];
   if (won) profile.wins++;
-  if (prizeChest) profile.chests[prizeChest]++;
+  if (prizeChest) { profile.chests[prizeChest]++; matchChests.push({ type: prizeChest, reason: won ? '¡Victoria!' : '⭐'.repeat(stars) }); }
   save(true);
   const currentGeneration = generation;
   setTimeout(() => {
     if (currentGeneration !== generation) return;
     state = 'results';
+    const earned = matchChests.splice(0);
     const title = won ? '¡GANASTE! 🏆' : stars >= 2 ? '¡Muy bien!' : stars ? '¡Buen intento!' : '¡Casi lo tienes!';
-    dialog(`<p class="eyebrow">${won ? '¡Pintaste más de la mitad!' : 'Fin de la partida'}</p><div class="result-stars" aria-label="${stars} de 3 estrellas">${[0, 1, 2].map(i => `<span class="${i < stars ? '' : 'off'}">⭐</span>`).join('')}</div><h2>${title}</h2><p>${won ? '¡El mapa es de tu color!' : reason}</p><div class="results"><div><strong>${Math.round(percent)}%</strong><small>🎨 Pintado</small></div><div><strong>${player.kills}</strong><small>🎯 Atrapados</small></div><div><strong>+${number(arena.bits)}</strong><small>⭐ Estrellas</small></div></div><p>+${number(arena.xp)} XP · Nivel ${levelFor(profile.xp)}</p>${prizeChest ? `<div class="prize-chest chest-${prizeChest}">${chestSVG(prizeChest, 64)}<b>¡Ganaste un ${CHESTS[prizeChest].name}!</b></div>` : '<p>Pinta un poco más para ganar un cofre 🎁</p>'}<div class="dialog-buttons"><button class="dialog-button" id="retry">${!online ? '¡OTRA VEZ! ▶' : online.private ? '👫 Volver a la sala' : '¡OTRA PARTIDA! ▶'}</button><button class="dialog-button secondary" id="to-menu">🏠 Menú</button></div>`);
+    const chests = earned.length ? `<div class="earned-chests">${earned.map(c => `<div class="prize-chest chest-${c.type}">${chestSVG(c.type, 56)}<b>${CHESTS[c.type].name}</b><small>${c.reason}</small></div>`).join('')}</div>` : '<p>Pinta un poco más para ganar un cofre 🎁</p>';
+    const actions = `<div class="dialog-buttons"><button class="dialog-button" id="retry">${!online ? '¡OTRA VEZ! ▶' : online.private ? '👫 Volver a la sala' : '¡OTRA PARTIDA! ▶'}</button><button class="dialog-button secondary" id="to-menu">🏠 Menú</button></div>`;
+    const wire = () => {
+      $('retry').onclick = !online ? start : online.private ? () => online.lobby ? showLobby(online.lobby) : toast('La sala se está preparando…') : () => joinOnline('quick');
+      $('to-menu').onclick = menu;
+    };
+    const opener = `<div class="dialog-buttons"><button class="dialog-button" id="open-earned">🎁 ¡ABRIR ${earned.length > 1 ? earned.length + ' COFRES' : 'COFRE'}!</button></div>`;
+    dialog(`<p class="eyebrow">${won ? '¡Pintaste más de la mitad!' : 'Fin de la partida'}</p><div class="result-stars" aria-label="${stars} de 3 estrellas">${[0, 1, 2].map(i => `<span class="${i < stars ? '' : 'off'}">⭐</span>`).join('')}</div><h2>${title}</h2><p>${won ? '¡El mapa es de tu color!' : reason}</p><div class="results"><div><strong>${Math.round(percent)}%</strong><small>🎨 Pintado</small></div><div><strong>${player.kills}</strong><small>🎯 Atrapados</small></div><div><strong>+${number(arena.bits)}</strong><small>⭐ Estrellas</small></div></div><p>+${number(arena.xp)} XP · Nivel ${levelFor(profile.xp)}</p>${chests}${earned.length ? opener : actions}`);
     tone(won ? 'level' : stars ? 'capture' : 'death');
     if (ranking) $('dialog-content').querySelector('h2').insertAdjacentHTML('afterend', `<p class="ranking-place">🏅 Quedaste en el puesto ${ranking.indexOf(0) + 1} de ${ranking.length}</p>`);
-    $('retry').onclick = !online ? start : online.private ? () => online.lobby ? showLobby(online.lobby) : toast('La sala se está preparando…') : () => joinOnline('quick');
-    $('to-menu').onclick = menu;
+    if (!earned.length) { wire(); return; }
+    // The chests won open by themselves after a moment, one after another.
+    const open = () => { if ($('open-earned') && generation === currentGeneration && state === 'results') openEarned(earned, actions, wire, currentGeneration); };
+    $('open-earned').onclick = open;
+    setTimeout(open, 2800);
   }, 750);
 }
 function pause() {
@@ -430,11 +472,12 @@ function processEvents() {
       const oldLevel = levelFor(profile.xp);
       profile.bits += event.bits; profile.xp += event.xp; profile.totalKills += event.kills;
       if (mirror) { arena.bits += event.bits; arena.xp += event.xp; }
-      // Each new level gives a rare chest; every fifth level a legendary one.
+      // Each new level gives a rare chest; every fifth level a legendary one. It is saved now
+      // but only shown when the match ends, so nothing covers the arena.
       if (levelFor(profile.xp) > oldLevel) {
         const level = levelFor(profile.xp), type = level % 5 === 0 ? 'legendario' : 'raro';
-        profile.chests[type]++;
-        announce(`🎉 ¡NIVEL ${level}! +🎁`); toast(`🎁 ¡Ganaste un ${CHESTS[type].name} por subir al nivel ${level}!`); tone('level');
+        profile.chests[type]++; matchChests.push({ type, reason: `Nivel ${level}` });
+        announce(`🎉 ¡NIVEL ${level}!`); tone('level');
       }
       save();
     }
@@ -728,5 +771,6 @@ function frame(time) {
 }
 showScreen('home'); requestAnimationFrame(frame);
 if (storageError) toast('No se pudo cargar tu progreso de este teléfono.');
-// The cloud copy is checked first, so a returning player is not asked for a new name.
-restoreAccount().finally(() => { if (!profile.name && state === 'menu' && !$('dialog').open) editName(true); });
+// The cloud copy is checked first, so a returning player is not asked for a new name;
+// a slow network only delays the question by two seconds.
+Promise.race([restoreAccount(), new Promise(resolve => setTimeout(resolve, 2000))]).finally(() => { if (!profile.name && state === 'menu' && !$('dialog').open) editName(true); });

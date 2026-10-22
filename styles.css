@@ -533,3 +533,12 @@ body.spectating .joystick,body.spectating .abilities,body.spectating .danger { d
   .name-row input { min-height:48px; font-size:22px }
   .login-buttons .dialog-button,.choice-buttons .dialog-button { min-height:48px }
 }
+
+/* Chests won in a match, listed on the results before they open */
+.earned-chests { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:6px }
+.earned-chests .prize-chest { flex-direction:column; gap:2px; margin:0; padding:6px 12px; font-size:16px }
+.earned-chests .prize-chest small { font:13px var(--body); font-weight:800; -webkit-text-stroke:0; color:#fff }
+@media(orientation:landscape) and (max-height:560px) {
+  .earned-chests .prize-chest { padding:2px 10px; font-size:14px }
+  .earned-chests .prize-chest svg { width:36px }
+}

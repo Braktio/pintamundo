@@ -22,7 +22,7 @@ También puedes abrir `index.html` con **Live Server** y usar la IP local y su p
 - El giro está limitado a **0,1 radianes por fotograma a 60 Hz**, equivalente a 6 rad/s. Se integra con un paso fijo de 90 Hz para conservar la misma velocidad angular entre dispositivos.
 - Los dos botones derechos activan las habilidades. Admiten un segundo dedo mientras mantienes el joystick.
 - **Ⅱ** pausa. Cambiar de pestaña o girar el móvil también pausa. En vertical aparece un aviso para girarlo a horizontal.
-- **⛶** solicita pantalla completa y bloqueo horizontal cuando el navegador lo permite. Si no lo admite, se juega en la ventana del navegador.
+- **⛶** solicita pantalla completa y bloqueo horizontal cuando el navegador lo permite. Safari en iPhone no lo admite: el botón explica cómo usar **Compartir → Añadir a pantalla de inicio**. Abierto desde ese icono (`manifest.webmanifest`, iconos en `icons/`), el juego ocupa toda la pantalla y el botón se oculta.
 - El teclado y el mouse se conservan como ayudas de desarrollo al probar en el PC; la interfaz de juego está diseñada para tocarse.
 
 ## Reglas estrictas
@@ -74,7 +74,7 @@ Los bots también reciben personajes al azar (los raros aparecen menos) y usan s
 | Épico | 2.500 ⭐ | — | 35% | 45% | 15% | 5% |
 | Legendario | 6.000 ⭐ | — | — | 40% | 45% | 15% |
 
-Se ganan cofres al terminar una partida (1 estrella → común, 2 → raro, victoria → épico), al subir de nivel (raro; legendario cada 5 niveles) y gratis cada 4 horas (común). Un perfil nuevo empieza con un cofre raro. Dentro de la rareza sorteada se prioriza lo que aún no tienes; un repetido se devuelve en estrellas (40 a 640 según rareza). Los colores especiales también salen en cofres. Las probabilidades se muestran en la pantalla de cofres. No hay compras con dinero real.
+Se ganan cofres al terminar una partida (1 estrella → común, 2 → raro, victoria → épico), al subir de nivel (raro; legendario cada 5 niveles) y gratis cada 4 horas (común). Un perfil nuevo empieza con un cofre raro. Los cofres ganados en una partida (por subir de nivel o por el resultado) se guardan al momento, pero no se anuncian mientras juegas: al terminar aparecen en los resultados y se abren solos, uno tras otro. Dentro de la rareza sorteada se prioriza lo que aún no tienes; un repetido se devuelve en estrellas (40 a 640 según rareza). Los colores especiales también salen en cofres. Las probabilidades se muestran en la pantalla de cofres. No hay compras con dinero real.
 
 ## HUD y progreso
 
@@ -90,13 +90,13 @@ Gato Rayo se regala en el nivel 2, Platillo Zum en el 5 y Dragoncito en el 10 (t
 
 La primera vez que se abre el juego pide un **nombre** (de 3 a 14 letras o números). Es el que ven los demás en línea y se cambia en **Progreso → 👤**. El progreso se guarda siempre en el teléfono. Ya no se puede exportar ni importar.
 
-En la app de Android, **Progreso → ☁️ Guardar en mi cuenta** permite entrar con **Google** (Firebase Authentication) y guarda el perfil en Firestore, en `users/{uid}`. Así se recupera en otro teléfono. Funciona así (`cloud.js` y la sección *Profile and cloud save* de `game.js`):
+En la app de Android y en el navegador, **Progreso → ☁️ Guardar en mi cuenta** permite entrar con **Google** (Firebase Authentication) y guarda el perfil en Firestore, en `users/{uid}`. Así se recupera en otro teléfono. Funciona así (`cloud.js` y la sección *Profile and cloud save* de `game.js`):
 
 - Cada cambio real del perfil lleva la hora (`updatedAt`). Al abrir la app gana la copia más reciente.
 - Al conectar una cuenta que ya tiene progreso en un teléfono que también lo tiene, el jugador elige cuál conservar. Si cierra sin elegir, la cuenta no se conecta.
 - Se sube como mucho una vez por minuto mientras juegas, y en seguida al terminar una partida, abrir un cofre, volver al menú o salir de la app.
 
-En el navegador no hay botón ☁️: el progreso se queda en el dispositivo.
+La app usa el inicio de sesión nativo de Android; el navegador carga la versión web de Firebase desde `www.gstatic.com` y abre la ventana de Google. En el navegador solo funciona en los dominios autorizados en Firebase (*Authentication → Configuración → Dominios autorizados*): `localhost`, `braktio.github.io` y `pintamundo.onrender.com`.
 
 ### Configuración de Firebase
 
