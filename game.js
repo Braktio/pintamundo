@@ -533,28 +533,27 @@ $('profile-button').onclick = () => editName();
 function renderAccount() {
   $('profile-name').textContent = profile.name || 'Elige tu nombre';
   $('account-button').hidden = !cloud.available;
-  $('account-button').textContent = account ? `☁️ ${cloud.PROVIDERS[account.provider]}` : '☁️ Guardar en mi cuenta';
+  $('account-button').textContent = account ? '☁️ Cuenta de Google' : '☁️ Guardar en mi cuenta';
 }
 function openAccount() {
   if (account) {
-    dialog(`<p class="eyebrow">☁️ Tu cuenta</p><h2>Conectado con ${cloud.PROVIDERS[account.provider]}</h2><p>Tu progreso se guarda en la nube. Entra con la misma cuenta en otro teléfono para seguir jugando.</p><div class="dialog-buttons"><button id="account-sync" class="dialog-button">🔄 Sincronizar ahora</button><button id="account-out" class="dialog-button secondary">🚪 Cerrar sesión</button><button id="account-close" class="dialog-button secondary">Cerrar</button></div>`);
+    dialog(`<p class="eyebrow">☁️ Tu cuenta</p><h2>Conectado con Google</h2><p>Tu progreso se guarda en la nube. Entra con la misma cuenta en otro teléfono para seguir jugando.</p><div class="dialog-buttons"><button id="account-sync" class="dialog-button">🔄 Sincronizar ahora</button><button id="account-out" class="dialog-button secondary">🚪 Cerrar sesión</button><button id="account-close" class="dialog-button secondary">Cerrar</button></div>`);
     $('account-sync').onclick = async () => { $('dialog').close(); await syncWithCloud(false); toast('☁️ Progreso sincronizado.'); };
     $('account-out').onclick = signOut;
   } else {
-    dialog(`<p class="eyebrow">☁️ Guardar en mi cuenta</p><h2>¡No pierdas tu progreso!</h2><p>Conecta tu cuenta para guardar tu progreso en la nube y recuperarlo en otro teléfono.</p><div class="dialog-buttons login-buttons"><button id="login-google" class="dialog-button login google">Continuar con Google</button><button id="login-facebook" class="dialog-button login facebook">Continuar con Facebook</button><button id="account-close" class="dialog-button secondary">Ahora no</button></div>`);
-    $('login-google').onclick = () => signIn('google');
-    $('login-facebook').onclick = () => signIn('facebook');
+    dialog(`<p class="eyebrow">☁️ Guardar en mi cuenta</p><h2>¡No pierdas tu progreso!</h2><p>Conecta tu cuenta de Google para guardar tu progreso en la nube y recuperarlo en otro teléfono.</p><div class="dialog-buttons login-buttons"><button id="login-google" class="dialog-button login google">Continuar con Google</button><button id="account-close" class="dialog-button secondary">Ahora no</button></div>`);
+    $('login-google').onclick = signIn;
   }
   $('account-close').onclick = () => $('dialog').close();
 }
-async function signIn(provider) {
-  try { account = await cloud.signIn(provider); }
+async function signIn() {
+  try { account = await cloud.signIn(); }
   catch { toast('No se pudo iniciar sesión. Inténtalo de nuevo.'); return; }
   if (!account) return;
   $('dialog').close(); renderAccount();
   await syncWithCloud(true);
   if (!account) return;
-  toast(`☁️ Conectado con ${cloud.PROVIDERS[account.provider]}.`);
+  toast('☁️ Conectado con Google.');
   if (!profile.name && state === 'menu' && !$('dialog').open) editName(true, cleanName(account.name.split(' ')[0]));
 }
 async function signOut() {

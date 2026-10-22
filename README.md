@@ -90,27 +90,24 @@ Gato Rayo se regala en el nivel 2, Platillo Zum en el 5 y Dragoncito en el 10 (t
 
 La primera vez que se abre el juego pide un **nombre** (de 3 a 14 letras o números). Es el que ven los demás en línea y se cambia en **Progreso → 👤**. El progreso se guarda siempre en el teléfono. Ya no se puede exportar ni importar.
 
-En la app de Android, **Progreso → ☁️ Guardar en mi cuenta** permite entrar con **Google** o **Facebook** (Firebase Authentication) y guarda el perfil en Firestore, en `users/{uid}`. Así se recupera en otro teléfono. Funciona así (`cloud.js` y la sección *Profile and cloud save* de `game.js`):
+En la app de Android, **Progreso → ☁️ Guardar en mi cuenta** permite entrar con **Google** (Firebase Authentication) y guarda el perfil en Firestore, en `users/{uid}`. Así se recupera en otro teléfono. Funciona así (`cloud.js` y la sección *Profile and cloud save* de `game.js`):
 
 - Cada cambio real del perfil lleva la hora (`updatedAt`). Al abrir la app gana la copia más reciente.
 - Al conectar una cuenta que ya tiene progreso en un teléfono que también lo tiene, el jugador elige cuál conservar. Si cierra sin elegir, la cuenta no se conecta.
 - Se sube como mucho una vez por minuto mientras juegas, y en seguida al terminar una partida, abrir un cofre, volver al menú o salir de la app.
 
-El botón ☁️ solo aparece cuando la APK incluye los plugins de Firebase. En el navegador el progreso se queda en el dispositivo.
+En el navegador no hay botón ☁️: el progreso se queda en el dispositivo.
 
-### Configurar Firebase y Facebook (una sola vez)
+### Configuración de Firebase
 
-Huellas de la clave de firma (`firma-android/pintamundo.keystore`), que piden Firebase y Facebook:
+Proyecto de Firebase `pintamundo-74676` (plan Spark gratuito). La app Android `com.braktio.pintamundo` está registrada con la huella de la clave de firma (`firma-android/pintamundo.keystore`):
 
 - SHA-1: `54:DF:4C:CE:10:D2:38:D2:22:1B:A1:D4:07:92:73:2E:1F:E6:CA:92`
 - SHA-256: `BE:13:64:BF:75:37:52:B4:EE:67:4F:9C:B7:17:60:3D:83:6D:18:51:10:9F:DB:FF:CE:AC:62:1E:4B:63:07:EA`
-- Key hash de Facebook: `VN9MzhDSONIiG6HUB5JzLh/mypI=`
 
-1. **Firebase** ([console.firebase.google.com](https://console.firebase.google.com), plan Spark gratuito, sin tarjeta): crea el proyecto *Pintamundo* y añade una app Android con el paquete `com.braktio.pintamundo` y el SHA-1 de arriba. Descarga `google-services.json` y colócalo en `android/app/`.
-2. **Authentication → Método de acceso**: activa Google.
-3. **Firestore Database**: créala en modo producción y pega en *Reglas* el contenido de `firestore.rules`.
-4. **Facebook** ([developers.facebook.com](https://developers.facebook.com)): crea una app de tipo «Autenticar usuarios con Facebook Login». En *Configuración → Básica*, añade la plataforma Android con el paquete `com.braktio.pintamundo`, la clase `com.braktio.pintamundo.MainActivity` y el key hash de arriba. Copia el **ID de la app** y la **clave secreta** en Firebase (*Authentication → Facebook*). Copia también la *URI de redireccionamiento OAuth* que muestra Firebase en *Facebook Login → Configuración*. En *Configuración → Avanzada* está el **token de cliente**, que necesita la app. Para que cualquiera (no solo los evaluadores) pueda entrar, la app de Facebook debe pasar al modo *Activo*, que exige una URL de política de privacidad.
-5. Con `google-services.json`, el ID de la app y el token de cliente de Facebook se instalan los plugins `@capacitor-firebase/authentication` y `@capacitor-firebase/firestore` y se configura el proyecto Android. Hasta entonces la APK no los incluye: Firebase cerraría la app al arrancar sin su configuración.
+- `android/app/google-services.json` es la configuración de Firebase. Se descarga de *Configuración del proyecto → Tus apps* y debe volver a descargarse si cambian los proveedores de acceso o las huellas. No es secreta: las reglas de Firestore son las que protegen los datos.
+- *Authentication*: solo Google está activado. `capacitor.config.json` (`providers`) y `android/variables.gradle` (`rgcfaIncludeGoogle`) incluyen únicamente el SDK de Google.
+- *Firestore*: las reglas están en `firestore.rules`; si cambian, hay que pegarlas de nuevo en la consola.
 
 Plan gratuito de Firestore: 1 GiB, 50.000 lecturas y 20.000 escrituras al día. Cada jugador lee una vez al abrir y escribe como mucho una vez por minuto, así que alcanza para cientos de jugadores diarios.
 
@@ -157,7 +154,7 @@ El proyecto Android (Capacitor 8) está en `android/`. En cada cambio en `main`,
 - `engine.js`: conquista, colisiones de punta, superposición de estelas, IA, Wall Surge, habilidades y validación del perfil.
 - `renderer.js`: cámara ortográfica, motos cenitales sombreadas, plasma, glow, chispas y estelas rotas.
 - `game.js`: bucle, joystick multitáctil, HUD, audio, orientación, pantalla completa y persistencia.
-- `cloud.js`: inicio de sesión con Google o Facebook y copia del perfil en Firestore (solo en la app).
+- `cloud.js`: inicio de sesión con Google y copia del perfil en Firestore (solo en la app).
 - `index.html` / `styles.css`: menú y HUD móvil horizontal.
 - `server.mjs`: servidor local y de red sin dependencias.
 

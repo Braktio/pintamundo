@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "649367771142",
+    "project_id": "pintamundo-74676",
+    "storage_bucket": "pintamundo-74676.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:649367771142:android:82e9d1bd869f011dc50b87",
+        "android_client_info": {
+          "package_name": "com.braktio.pintamundo"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "649367771142-fi85115ldv9kcl1smv9bg43lr0jn2509.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.braktio.pintamundo",
+            "certificate_hash": "54df4cce10d238d2221ba1d40792732e1fe6ca92"
+          }
+        },
+        {
+          "client_id": "649367771142-tb3edpumhgikp7p9inr30heqlbpo1i74.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBH4M_YGK2tLLCG4_sm2JsoF9cPvSlEmFI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "649367771142-tb3edpumhgikp7p9inr30heqlbpo1i74.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
