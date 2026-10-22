@@ -9,7 +9,7 @@ import { Hub } from './multiplayer.mjs';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2' };
 // Only the files the browser needs are public; tests, scripts and the server stay private.
-const PUBLIC = new Set(['/index.html', '/styles.css', '/game.js', '/engine.js', '/renderer.js', '/online.js']);
+const PUBLIC = new Set(['/index.html', '/styles.css', '/game.js', '/engine.js', '/renderer.js', '/online.js', '/cloud.js']);
 const server = createServer(async (request, response) => {
   try {
     const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);

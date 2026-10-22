@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest } from '../engine.js';
+import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest } from '../engine.js';
 import { Renderer } from '../renderer.js';
 
 function clean(arena = new Arena()) {
@@ -268,6 +268,19 @@ test('profile round-trips, migrates old crates and rejects bad balances, chests 
   assert.ok(parseProfile(JSON.stringify(tampered)).freeChestAt <= Date.now() + 4 * 3600000);
   const migrated = parseProfile(JSON.stringify(old));
   assert.equal(migrated.chests.raro, 2); assert.equal(migrated.slots, undefined); assert.deepEqual(migrated.skins, ['spectre']);
+});
+test('nicknames keep letters, digits, spaces, "_" and "-" and need 3 to 14 characters', () => {
+  assert.equal(cleanName('  Ana   María '), 'Ana María');
+  assert.equal(cleanName('Ñandú_99'), 'Ñandú_99');
+  assert.equal(cleanName('<b>Hola</b>"'), 'bHolab');
+  assert.equal(cleanName('ab'), '');
+  assert.equal(cleanName('Supercalifragilístico'), 'Supercalifragi');
+  assert.equal(cleanName(undefined), '');
+  // The name and the change stamp survive a reload; a bad name is dropped, not fatal.
+  const profile = Object.assign(freshProfile(), { name: 'Luna', updatedAt: 1700000000000 });
+  const loaded = parseProfile(JSON.stringify(profile));
+  assert.equal(loaded.name, 'Luna'); assert.equal(loaded.updatedAt, 1700000000000);
+  assert.equal(parseProfile(JSON.stringify({ ...profile, name: 'x' })).name, '');
 });
 test('level thresholds unlock road avatars at the declared XP thresholds', () => {
   for (const level of [1, 2, 3, 5, 10]) assert.equal(levelFor(levelXP(level)), level);

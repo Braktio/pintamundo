@@ -1,0 +1,14 @@
+rules_version = '2';
+// Each player can only read and write their own document, users/{uid}, written by cloud.js.
+// Paste these rules in Firebase console → Firestore Database → Rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['profile', 'updatedAt', 'name', 'level'])
+        && request.resource.data.profile is string
+        && request.resource.data.profile.size() < 20000;
+    }
+  }
+}

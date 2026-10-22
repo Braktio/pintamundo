@@ -1,6 +1,6 @@
 // Authoritative online rooms. The server runs the same engine as solo games and
 // streams compact deltas; phones only send their heading and power presses.
-import { Arena, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, freshProfile } from './engine.js';
+import { Arena, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, freshProfile, cleanName } from './engine.js';
 
 export const STEP = 1 / 90;
 // 30 updates per second keep online movement smooth on phones.
@@ -13,11 +13,11 @@ export const FROZEN = 32, WALL = 64, HUMAN = 128;
 const validSkin = id => CHARACTERS.some(c => c.id === id) ? id : CHARACTERS[0].id;
 const validColor = color => [...TRAILS.map(t => t.color), ...COLORS].includes(color) ? color : COLORS[0];
 const normalizeCode = code => String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
-// Names are the characters' names, so children never type anything personal.
+// Players are shown with their nickname, or their character's name if they have none.
 function uniqueNames(members) {
   const seen = {};
   return members.map(m => {
-    const base = CHARACTERS.find(c => c.id === m.skin).name;
+    const base = m.name || CHARACTERS.find(c => c.id === m.skin).name;
     seen[base] = (seen[base] || 0) + 1;
     return seen[base] > 1 ? `${base} ${seen[base]}` : base;
   });
@@ -144,7 +144,7 @@ export class Hub {
   constructor(options = {}) { this.options = { ...DEFAULTS, ...options }; this.rooms = new Map(); }
   // `socket` only needs send(text). Returns the handlers for incoming messages and close.
   connect(socket) {
-    const client = { socket, room: null, skin: CHARACTERS[0].id, color: COLORS[0], easy: false, messages: 0, window: Date.now() };
+    const client = { socket, room: null, name: '', skin: CHARACTERS[0].id, color: COLORS[0], easy: false, messages: 0, window: Date.now() };
     return { message: raw => this.message(client, raw), close: () => client.room?.remove(client) };
   }
   sendRaw(client, text) { try { client.socket.send(text); } catch { /* A broken socket is cleaned up by its close event. */ } }
@@ -158,7 +158,7 @@ export class Hub {
     if (!data || typeof data.t !== 'string') return;
     if (data.t === 'quick' || data.t === 'create' || data.t === 'join') {
       client.room?.remove(client);
-      Object.assign(client, { skin: validSkin(data.skin), color: validColor(data.color), easy: data.easy === true });
+      Object.assign(client, { name: cleanName(data.name), skin: validSkin(data.skin), color: validColor(data.color), easy: data.easy === true });
     }
     if (data.t === 'quick') this.quick(client);
     else if (data.t === 'create') this.create(client);

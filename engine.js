@@ -107,7 +107,12 @@ export function crossedCells(x0, y0, x1, y1) {
 export const emptyChests = () => Object.fromEntries(Object.keys(CHESTS).map(type => [type, 0]));
 export function freshProfile() {
   // New players start with a rare chest so their first character with a power is one tap away.
-  return { version: 1, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0 };
+  return { version: 1, name: '', updatedAt: 0, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0 };
+}
+// Player nicknames: 3 to 14 letters, digits, spaces, "_" or "-". Returns '' when unusable.
+export function cleanName(text) {
+  const name = String(text ?? '').replace(/[^\p{L}\p{N} _-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 14).trim();
+  return name.length >= 3 ? name : '';
 }
 export const ownsCharacter = (profile, id) => {
   const found = CHARACTERS.find(c => c.id === id);
@@ -142,7 +147,8 @@ export function parseProfile(raw) {
   // gets its own check. It is capped so an edited save can't lock the chest for longer.
   const latest = Date.now() + FREE_CHEST_HOURS * 3600000;
   result.freeChestAt = Number.isFinite(data.freeChestAt) && data.freeChestAt > 0 ? Math.min(data.freeChestAt, latest) : 0;
-  return { ...result, easy: data.easy === true, nemesis: typeof data.nemesis === 'string' ? data.nemesis.slice(0, 40) : '', skin: data.skin, trail: data.trail };
+  result.updatedAt = Number.isFinite(data.updatedAt) && data.updatedAt > 0 ? data.updatedAt : 0;
+  return { ...result, name: cleanName(data.name), easy: data.easy === true, nemesis: typeof data.nemesis === 'string' ? data.nemesis.slice(0, 40) : '', skin: data.skin, trail: data.trail };
 }
 // Every chest prize: characters (except the starter) and the special trail colors.
 export const PRIZES = [
@@ -156,7 +162,7 @@ export function rollRarity(type, random = Math.random) {
   return odds.at(-1)[0];
 }
 // Opens one chest into the profile. Unowned prizes of the rolled rarity are preferred,
-// so children rarely get repeats; a repeat is converted into stars.
+// so players rarely get repeats; a repeat is converted into stars.
 export function openChest(profile, type, random = Math.random) {
   const rarity = rollRarity(type, random), pool = PRIZES.filter(p => p.rarity === rarity);
   const fresh = pool.filter(p => p.type === 'skins' ? !ownsCharacter(profile, p.id) : !profile.trails.includes(p.id));

@@ -23,10 +23,10 @@ test('quick play fills with robots, streams state and ends by time', async () =>
   const hub = new Hub({ quickWait: .15, tickMs: 20, matchSeconds: .6 });
   try {
     const a = phone(hub), b = phone(hub);
-    a.send({ t: 'quick', skin: 'tron', color: '#2fa8ff' });
+    a.send({ t: 'quick', name: '<Luna>', skin: 'tron', color: '#2fa8ff' });
     b.send({ t: 'quick', skin: 'tron', color: '#2fa8ff' });
     assert.equal(a.last('lobby').players.length, 2, 'both phones share the quick room');
-    assert.deepEqual(a.last('lobby').players.map(p => p.name), ['Gato Rayo', 'Gato Rayo 2'], 'names come from characters, never typed');
+    assert.deepEqual(a.last('lobby').players.map(p => p.name), ['Luna', 'Gato Rayo'], 'nicknames are cleaned; without one, the character name is used');
     await sleep(500);
     const start = a.last('start');
     assert.ok(start, 'the match starts after the countdown');

@@ -45,7 +45,7 @@ try {
   await page('Runtime.enable'); await page('Page.enable');
   await page('Page.addScriptToEvaluateOnNewDocument', { source: 'let randomSeed=482;Math.random=()=>{randomSeed=(Math.imul(randomSeed,1664525)+1013904223)>>>0;return randomSeed/4294967296;};' });
   // Start as Gato Rayo (rare, Turbo) so the power button can be exercised.
-  await page('Page.addScriptToEvaluateOnNewDocument', { source: "if(!localStorage.getItem('neon-frontier.profile.v1'))localStorage.setItem('neon-frontier.profile.v1',JSON.stringify({version:1,bits:0,xp:200,wins:0,totalKills:0,best:0,nemesis:'',skin:'tron',trail:'cyan',skins:[],trails:['cyan'],easy:false,chests:{comun:0,raro:1,epico:0,legendario:0},freeChestAt:0}));" });
+  await page('Page.addScriptToEvaluateOnNewDocument', { source: "if(!localStorage.getItem('neon-frontier.profile.v1'))localStorage.setItem('neon-frontier.profile.v1',JSON.stringify({version:1,name:'Prueba',bits:0,xp:200,wins:0,totalKills:0,best:0,nemesis:'',skin:'tron',trail:'cyan',skins:[],trails:['cyan'],easy:false,chests:{comun:0,raro:1,epico:0,legendario:0},freeChestAt:0}));" });
   await page('Page.navigate', { url: base });
   for (let i = 0; i < 30; i++) { if (await evaluate('document.querySelectorAll(".hangar-card").length') > 30) break; await sleep(150); }
   assert.deepEqual(errors, []);
@@ -86,6 +86,12 @@ try {
   const fixture = await evaluate('(async()=>{const m=await import("./engine.js");const p=m.freshProfile();p.bits=1200;p.xp=1000;p.skin="tron";return p;})()');
   await page('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('neon-frontier.profile.v1', ${JSON.stringify(JSON.stringify(fixture))});` });
   await page('Page.reload'); await sleep(500);
+  // A profile without a nickname is asked to create one before playing.
+  assert.equal(await evaluate('Boolean(document.getElementById("name-input"))'), true, 'new players are asked for a name');
+  await screenshot('preview-profile.png');
+  await evaluate('document.getElementById("name-input").value="  Ana <b>"; document.getElementById("name-save").click()');
+  assert.equal(await evaluate('JSON.parse(localStorage.getItem("neon-frontier.profile.v1")).name'), 'Ana b');
+  assert.equal(await evaluate('document.getElementById("dialog").open'), false);
   await evaluate('document.querySelector("[data-buy=comun]").click()'); await sleep(1700);
   assert.equal(await evaluate('Boolean(document.getElementById("close-crate"))'), true);
   const afterChest = await evaluate('JSON.parse(localStorage.getItem("neon-frontier.profile.v1"))');
@@ -105,7 +111,7 @@ try {
   assert.equal(await evaluate('getComputedStyle(document.getElementById("rotate-prompt")).display'), 'none');
   await screenshot('preview-mobile-landscape-menu.png');
   await evaluate('document.getElementById("play").click()');
-  assert.equal(await evaluate('document.getElementById("pilot-name").textContent'), 'Tú');
+  assert.equal(await evaluate('document.getElementById("pilot-name").textContent'), 'Ana b');
   assert.match(await evaluate('document.getElementById("hud-territory").textContent'), /^\d+%$/);
   assert.match(await evaluate('document.getElementById("leaders").textContent'), /\d+%/);
   const stick = await evaluate('(() => { const r=document.getElementById("joystick").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');

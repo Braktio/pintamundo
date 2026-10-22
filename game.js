@@ -1,6 +1,7 @@
-import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, levelFor, levelXP } from './engine.js';
+import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
 import { Renderer, shade } from './renderer.js';
 import { Connection, Mirror, defaultServer, rememberServer, normalizeServer } from './online.js';
+import * as cloud from './cloud.js';
 
 const $ = id => document.getElementById(id);
 const SAVE_KEY = 'neon-frontier.profile.v1';
@@ -8,6 +9,11 @@ let profile = freshProfile();
 let storageError = false;
 try { const raw = localStorage.getItem(SAVE_KEY); if (raw) profile = parseProfile(raw); }
 catch { storageError = true; }
+// Everything except the timestamp: used to notice real changes before stamping a save.
+const contentOf = ({ updatedAt, ...rest }) => JSON.stringify(rest);
+let savedContent = contentOf(profile);
+// Signed-in account ({ uid, name, provider }) and the state of the pending cloud upload.
+let account = null, cloudDirty = false, cloudTimer = 0, cloudBusy = false;
 const renderer = new Renderer($('arena'));
 let arena = new Arena(profile), state = 'menu', hangarTab = 'skins';
 // Online session: { connection, private, lobby }. `mirror` is set only while an online match runs.
@@ -45,9 +51,14 @@ function toast(message) {
   const el = document.createElement('div'); el.className = 'toast'; el.textContent = message;
   $('toasts').append(el); setTimeout(() => el.remove(), 4500);
 }
-function save() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(profile)); $('save-label').textContent = 'Tu progreso está guardado'; }
-  catch { $('save-label').textContent = 'No se puede guardar aquí · usa «Guardar copia»'; }
+// Each real change is stamped, so the newest copy wins when the phone and the cloud
+// disagree. `flush` also sends it to the cloud right away instead of within a minute.
+function save(flush = false) {
+  const content = contentOf(profile);
+  if (content !== savedContent) { profile.updatedAt = Date.now(); savedContent = content; cloudDirty = true; }
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(profile)); $('save-label').textContent = account ? 'Tu progreso se guarda en tu cuenta' : 'Tu progreso está guardado en este teléfono'; }
+  catch { $('save-label').textContent = 'No se puede guardar en este dispositivo'; }
+  scheduleCloud(flush);
 }
 // Cartoon sound effects: each note is [frequency, glide target, start, length, wave].
 const SOUNDS = {
@@ -175,7 +186,7 @@ function renderMenu() {
   $('stat-best').textContent = Math.round(profile.best) + '%';
   const current = characterFor(profile.skin);
   $('home-character').innerHTML = `${rarityChip(current.rarity)} <b>${current.name}</b> <span class="home-powers">${powerIcons(current.powers)}</span>`;
-  renderEasy(); renderChests(); renderHangar();
+  renderEasy(); renderChests(); renderHangar(); renderAccount();
 }
 let screen = 'home';
 function showScreen(name) {
@@ -205,7 +216,7 @@ document.querySelectorAll('[data-hangar]').forEach(button => button.onclick = ()
 // Chest opening: shake, then reveal the prize with its rarity color and powers.
 function revealChest(type) {
   const result = openChest(profile, type), { prize, rarity, duplicate, refund } = result;
-  save(); renderMenu();
+  save(true); renderMenu();
   dialog(`<div class="crate-reward"><p class="eyebrow">${CHESTS[type].name}</p><div class="crate-opening" id="crate-spinner">${chestSVG(type, 150)}</div><p>¿Qué habrá dentro…?</p></div>`);
   setTimeout(() => {
     if (!$('crate-spinner')) return;
@@ -250,6 +261,7 @@ function enterMatch() {
   $('dialog').close(); $('arena').focus({ preventScroll: true });
   document.documentElement.style.setProperty('--player', arena.actors[0].color);
   $('pilot-avatar').src = renderer.portraitURL(arena.actors[0]);
+  $('pilot-name').textContent = profile.name || 'Tú';
   $('leaders').innerHTML = arena.actors.map(actor => `<li data-actor="${actor.id}" class="${actor.id ? '' : 'me'}" style="--actor:${actor.color}"><img src="${renderer.portraitURL(actor)}" alt="${actor.name}"><i></i><b>0%</b></li>`).join('');
   $('timer-pill').hidden = !mirror;
   stopSpectating();
@@ -285,7 +297,7 @@ function menu() {
   generation++; state = 'menu'; keys.clear(); aim = null; resetJoystick();
   $('dialog').close(); $('menu').hidden = false; $('hud').hidden = true;
   document.body.classList.remove('in-match');
-  arena = new Arena(profile); renderMenu(); save();
+  arena = new Arena(profile); renderMenu(); save(true);
 }
 function end(won, reason, ranking = null) {
   if (state !== 'playing' && state !== 'paused') return;
@@ -298,7 +310,7 @@ function end(won, reason, ranking = null) {
   const prizeChest = [null, 'comun', 'raro', 'epico'][stars];
   if (won) profile.wins++;
   if (prizeChest) profile.chests[prizeChest]++;
-  save();
+  save(true);
   const currentGeneration = generation;
   setTimeout(() => {
     if (currentGeneration !== generation) return;
@@ -325,7 +337,7 @@ $('pause').onclick = () => {
   $('resume').onclick = () => $('dialog').close();
   $('abandon').onclick = menu;
 };
-document.addEventListener('visibilitychange', () => { if (document.hidden) { pause(); save(); } });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { pause(); save(true); } });
 addEventListener('blur', () => { keys.clear(); pause(); });
 addEventListener('pagehide', save);
 setInterval(save, 10000);
@@ -500,29 +512,118 @@ $('dialog').addEventListener('cancel', event => {
   else if (state === 'results' || state === 'lobby') menu();
   else if (!$('crate-spinner')) $('dialog').close();
 });
-$('export').onclick = () => {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' }));
-  const link = document.createElement('a'); link.href = url; link.download = 'pintamundo-progreso.json'; link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000); toast('💾 ¡Copia guardada!');
-};
-$('import').onclick = () => $('import-file').click();
-$('import-file').onchange = async event => {
-  const file = event.target.files[0]; if (!file) return;
-  try {
-    if (file.size > 100000) throw new Error('Archivo demasiado grande');
-    const candidate = parseProfile(await file.text());
-    dialog(`<p class="eyebrow">📂 Cargar copia</p><h2>Jugador de nivel ${levelFor(candidate.xp)}</h2><p>${number(candidate.bits)} ⭐. Esta copia reemplazará tu progreso actual. Pídele ayuda a un adulto si no estás seguro.</p><div class="dialog-buttons"><button id="confirm-import" class="dialog-button">Sí, cargar</button><button id="cancel-import" class="dialog-button secondary">Cancelar</button></div>`);
-    $('confirm-import').onclick = () => { profile = candidate; menu(); toast('📂 ¡Progreso cargado!'); };
-    $('cancel-import').onclick = () => $('dialog').close();
-  } catch { toast('Ese archivo no sirve. Tu progreso sigue igual.'); }
-  event.target.value = '';
-};
+// ---------- Profile and cloud save ----------
+// The nickname is what other players see online. Cleaned names only contain letters,
+// digits, spaces, "_" and "-", so they are safe to place in HTML.
+function editName(first = false, suggestion = '') {
+  const offerCloud = first && cloud.available && !account;
+  dialog(`<p class="eyebrow">${first ? '👋 ¡Bienvenido a Pintamundo!' : '👤 Tu perfil'}</p><h2>${first ? 'Crea tu perfil' : 'Cambia tu nombre'}</h2><p>Así te verán los demás en las partidas en línea.</p><div class="name-row"><input id="name-input" maxlength="14" value="${profile.name || suggestion}" placeholder="Tu nombre" autocomplete="nickname" spellcheck="false" aria-label="Tu nombre"><small>De 3 a 14 letras o números.</small></div><div class="dialog-buttons"><button id="name-save" class="dialog-button">✓ ${first ? '¡LISTO!' : 'Guardar'}</button>${first ? '' : '<button id="name-cancel" class="dialog-button secondary">Cancelar</button>'}</div>${offerCloud ? '<p class="cloud-hint">¿Ya jugabas en otro teléfono?</p><div class="dialog-buttons"><button id="name-cloud" class="dialog-button secondary">☁️ Recuperar mi progreso</button></div>' : ''}`);
+  const input = $('name-input');
+  $('name-save').onclick = () => {
+    const name = cleanName(input.value);
+    if (!name) { toast('Tu nombre necesita de 3 a 14 letras o números.'); input.focus(); return; }
+    profile.name = name; save(true); renderMenu(); $('dialog').close();
+    if (first) toast(`¡Hola, ${name}! 🎨`);
+  };
+  input.onkeydown = event => { if (event.key === 'Enter') $('name-save').click(); };
+  if ($('name-cancel')) $('name-cancel').onclick = () => $('dialog').close();
+  if ($('name-cloud')) $('name-cloud').onclick = openAccount;
+}
+$('profile-button').onclick = () => editName();
+function renderAccount() {
+  $('profile-name').textContent = profile.name || 'Elige tu nombre';
+  $('account-button').hidden = !cloud.available;
+  $('account-button').textContent = account ? `☁️ ${cloud.PROVIDERS[account.provider]}` : '☁️ Guardar en mi cuenta';
+}
+function openAccount() {
+  if (account) {
+    dialog(`<p class="eyebrow">☁️ Tu cuenta</p><h2>Conectado con ${cloud.PROVIDERS[account.provider]}</h2><p>Tu progreso se guarda en la nube. Entra con la misma cuenta en otro teléfono para seguir jugando.</p><div class="dialog-buttons"><button id="account-sync" class="dialog-button">🔄 Sincronizar ahora</button><button id="account-out" class="dialog-button secondary">🚪 Cerrar sesión</button><button id="account-close" class="dialog-button secondary">Cerrar</button></div>`);
+    $('account-sync').onclick = async () => { $('dialog').close(); await syncWithCloud(false); toast('☁️ Progreso sincronizado.'); };
+    $('account-out').onclick = signOut;
+  } else {
+    dialog(`<p class="eyebrow">☁️ Guardar en mi cuenta</p><h2>¡No pierdas tu progreso!</h2><p>Conecta tu cuenta para guardar tu progreso en la nube y recuperarlo en otro teléfono.</p><div class="dialog-buttons login-buttons"><button id="login-google" class="dialog-button login google">Continuar con Google</button><button id="login-facebook" class="dialog-button login facebook">Continuar con Facebook</button><button id="account-close" class="dialog-button secondary">Ahora no</button></div>`);
+    $('login-google').onclick = () => signIn('google');
+    $('login-facebook').onclick = () => signIn('facebook');
+  }
+  $('account-close').onclick = () => $('dialog').close();
+}
+async function signIn(provider) {
+  try { account = await cloud.signIn(provider); }
+  catch { toast('No se pudo iniciar sesión. Inténtalo de nuevo.'); return; }
+  if (!account) return;
+  $('dialog').close(); renderAccount();
+  await syncWithCloud(true);
+  if (!account) return;
+  toast(`☁️ Conectado con ${cloud.PROVIDERS[account.provider]}.`);
+  if (!profile.name && state === 'menu' && !$('dialog').open) editName(true, cleanName(account.name.split(' ')[0]));
+}
+async function signOut() {
+  $('dialog').close();
+  if (cloudDirty) await pushCloud();
+  try { await cloud.signOut(); } catch { /* The local session is dropped anyway. */ }
+  account = null; renderAccount(); save();
+  toast('Sesión cerrada. Tu progreso sigue en este teléfono.');
+}
+// Uploads at most once a minute while playing; `now` sends it right away.
+function scheduleCloud(now = false) {
+  if (!account || !cloudDirty) return;
+  if (now) { clearTimeout(cloudTimer); cloudTimer = 0; void pushCloud(); }
+  else if (!cloudTimer) cloudTimer = setTimeout(() => { cloudTimer = 0; void pushCloud(); }, 60000);
+}
+async function pushCloud() {
+  if (!account || cloudBusy) return;
+  cloudBusy = true; cloudDirty = false;
+  try { await cloud.upload(account.uid, profile, levelFor(profile.xp)); }
+  catch { cloudDirty = true; }
+  finally { cloudBusy = false; if (cloudDirty) scheduleCloud(); }
+}
+// Replaces the local profile with the cloud copy (only from the menu, never mid-match).
+function adopt(remote) {
+  profile = remote; savedContent = contentOf(profile);
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(profile)); } catch { /* The cloud still has it. */ }
+  arena = new Arena(profile); renderMenu();
+}
+const hasProgress = p => p.xp > 0 || p.wins > 0 || p.skins.length > 0;
+const summary = p => `${p.name || 'Sin nombre'} · Nivel ${levelFor(p.xp)} · ${number(p.bits)} ⭐`;
+// On launch (`ask` false) the newest copy wins. Right after signing in on this phone,
+// if both copies have progress and differ, the player chooses which one to keep.
+async function syncWithCloud(ask) {
+  let remote = null;
+  try { const text = await cloud.download(account.uid); if (text) remote = parseProfile(text); }
+  catch { toast('No se pudo leer tu progreso de la nube. Lo intentaremos más tarde.'); return; }
+  const upload = () => { cloudDirty = true; scheduleCloud(true); };
+  if (!remote) { upload(); return; }
+  if (remote.updatedAt === profile.updatedAt) return;
+  if (state !== 'menu') { upload(); return; }
+  if (!hasProgress(profile)) { adopt(remote); return; }
+  if (!ask || !hasProgress(remote)) { if (remote.updatedAt > profile.updatedAt) adopt(remote); else upload(); return; }
+  // Closing without choosing leaves the account unlinked, so neither copy is overwritten.
+  let chosen = false;
+  await new Promise(resolve => {
+    dialog(`<p class="eyebrow">☁️ Tu cuenta</p><h2>¿Qué progreso quieres usar?</h2><p>Tu cuenta ya tiene progreso guardado. El que no elijas se perderá.</p><div class="dialog-buttons choice-buttons"><button id="use-cloud" class="dialog-button">☁️ El de mi cuenta<small>${summary(remote)}</small></button><button id="use-local" class="dialog-button secondary">📱 El de este teléfono<small>${summary(profile)}</small></button></div>`);
+    $('use-cloud').onclick = () => { chosen = true; adopt(remote); $('dialog').close(); };
+    $('use-local').onclick = () => { chosen = true; upload(); $('dialog').close(); };
+    $('dialog').addEventListener('close', resolve, { once: true });
+  });
+  if (!chosen) {
+    account = null; renderAccount();
+    try { await cloud.signOut(); } catch { /* Nothing was linked. */ }
+    toast('No conectamos tu cuenta. Tu progreso sigue en este teléfono.');
+  }
+}
+$('account-button').onclick = openAccount;
+async function restoreAccount() {
+  if (!cloud.available) return;
+  try { account = await cloud.currentAccount(); } catch { account = null; }
+  renderAccount();
+  if (account) await syncWithCloud(false);
+}
 
 // ---------- Online play ----------
-// Children never type names or chat: everyone is shown with their character's name.
+// Players are shown with their nickname and character. There is no chat.
 function openOnline() {
   const server = defaultServer();
-  dialog(`<p class="eyebrow">🌐 Jugar en línea</p><h2>¡Juega con otros niños!</h2><p>Si faltan jugadores, los robots ocupan su lugar. No hay chat: solo se ve tu personaje.</p><div class="online-actions"><button id="online-quick" class="dialog-button">⚡ Jugar rápido</button><button id="online-create" class="dialog-button">👫 Crear sala para amigos</button><div class="join-row"><label for="online-code">¿Tu amigo ya creó una sala? Escribe su código:</label><input id="online-code" maxlength="8" placeholder="GATO-42" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="online-join" class="dialog-button">🚪 Unirme a la sala</button></div></div><details class="server-box" ${server ? '' : 'open'}><summary>⚙️ Servidor</summary><input id="online-server" value="${server}" placeholder="192.168.1.20:5173" autocomplete="off" aria-label="Dirección del servidor"><small>Pide ayuda a un adulto para cambiar esto.</small></details><div class="dialog-buttons"><button id="online-close" class="dialog-button secondary">Cancelar</button></div>`);
+  dialog(`<p class="eyebrow">🌐 Jugar en línea</p><h2>¡Juega con gente de todo el mundo!</h2><p>Si faltan jugadores, los robots ocupan su lugar. Los demás verán tu nombre y tu personaje.</p><div class="online-actions"><button id="online-quick" class="dialog-button">⚡ Jugar rápido</button><button id="online-create" class="dialog-button">👫 Crear sala para amigos</button><div class="join-row"><label for="online-code">¿Tu amigo ya creó una sala? Escribe su código:</label><input id="online-code" maxlength="8" placeholder="GATO-42" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="online-join" class="dialog-button">🚪 Unirme a la sala</button></div></div><details class="server-box" ${server ? '' : 'open'}><summary>⚙️ Servidor</summary><input id="online-server" value="${server}" placeholder="192.168.1.20:5173" autocomplete="off" aria-label="Dirección del servidor"><small>Cámbialo solo si juegas con un servidor propio.</small></details><div class="dialog-buttons"><button id="online-close" class="dialog-button secondary">Cancelar</button></div>`);
   $('online-quick').onclick = () => joinOnline('quick');
   $('online-create').onclick = () => joinOnline('create');
   $('online-join').onclick = () => joinOnline('join', $('online-code').value);
@@ -542,7 +643,7 @@ async function joinOnline(kind, code = '') {
       const candidate = new Connection(url, onServerMessage, onDisconnect);
       try { await candidate.open(); connection = candidate; }
       catch {
-        if (!$('connect-note')) return; // The child closed the window.
+        if (!$('connect-note')) return; // The player closed the window.
         $('connect-note').textContent = 'El servidor se está despertando… puede tardar hasta un minuto. ⏳';
         await new Promise(resolve => setTimeout(resolve, 1500));
       }
@@ -553,7 +654,7 @@ async function joinOnline(kind, code = '') {
   }
   online.private = kind !== 'quick'; online.lobby = null;
   const character = characterFor(profile.skin);
-  online.connection.send({ t: kind, code, skin: ownsCharacter(profile, character.id) ? character.id : 'interceptor', color: playerColor(), easy: profile.easy === true });
+  online.connection.send({ t: kind, code, name: profile.name, skin: ownsCharacter(profile, character.id) ? character.id : 'interceptor', color: playerColor(), easy: profile.easy === true });
 }
 function disconnect() {
   if (!online) return;
@@ -627,4 +728,6 @@ function frame(time) {
   requestAnimationFrame(frame);
 }
 showScreen('home'); requestAnimationFrame(frame);
-if (storageError) toast('No se pudo cargar tu progreso. Puedes cargar una copia guardada.');
+if (storageError) toast('No se pudo cargar tu progreso de este teléfono.');
+// The cloud copy is checked first, so a returning player is not asked for a new name.
+restoreAccount().finally(() => { if (!profile.name && state === 'menu' && !$('dialog').open) editName(true); });
