@@ -12,7 +12,7 @@ const TURN_RATE = 6, PLAYER_SPEED = 4.8;
 const SERVER_KEY = 'pintamundo.server';
 
 // Public game server on the internet, used by GitHub Pages and by the Android app.
-export const PUBLIC_SERVER = '';
+export const PUBLIC_SERVER = 'wss://pintamundo.onrender.com/ws';
 // Inside the APK the page is served by Capacitor itself, not by our game server.
 const nativeApp = () => !!globalThis.Capacitor?.isNativePlatform?.();
 // Address of the game server: a saved choice first; served by our own Node server

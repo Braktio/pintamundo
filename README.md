@@ -130,7 +130,7 @@ No hay chat. Cada jugador aparece con su nombre de perfil, ya limpio de símbolo
 2. Arranca el servidor: `node server.mjs`.
 3. En cada teléfono, conectado a la misma Wi-Fi, abre la dirección **En tu móvil** que imprime la terminal y pulsa **🌐 Jugar en línea**. El servidor se detecta solo.
 
-Desde la versión de GitHub Pages hay que escribir la dirección del servidor en **⚙️ Servidor** (por ejemplo `192.168.1.20:5173`); se recuerda en cada dispositivo. Mientras el servidor no esté publicado en internet, el modo en línea solo funciona dentro de la misma red.
+La APK y la versión de GitHub Pages se conectan solas al servidor público `wss://pintamundo.onrender.com/ws` (`PUBLIC_SERVER` en `online.js`). En **⚙️ Servidor** se puede escribir otro, por ejemplo `192.168.1.20:5173` para jugar con el PC en la misma Wi-Fi; se recuerda en cada dispositivo.
 
 Archivos: `multiplayer.mjs` (salas, códigos, relleno con robots y envío de cambios), `online.js` (conexión, réplica de la partida y suavizado en el teléfono) y `server.mjs` (sirve el juego, `/ws` para las partidas y `/health` para los servicios de alojamiento). La comprobación `node scripts/online-check.mjs "ruta/a/chrome.exe"` abre dos pestañas que juegan la misma partida.
 
@@ -147,7 +147,7 @@ El proyecto Android (Capacitor 8) está en `android/`. En cada cambio en `main`,
 
 ## Servidor en internet
 
-`render.yaml` describe el servidor para Render (plan gratuito, región Virginia): `npm ci --omit=dev`, `node server.mjs` y comprobación en `/health`. En el plan gratuito se duerme tras 15 minutos sin jugadores; el juego reintenta la conexión hasta un minuto mientras se despierta.
+El servidor público está en **https://pintamundo.onrender.com**, creado desde `render.yaml` como Blueprint de Render (plan gratuito, región Virginia): `npm ci --omit=dev`, `node server.mjs` y comprobación en `/health`. En el plan gratuito se duerme tras 15 minutos sin jugadores; el juego reintenta la conexión hasta un minuto mientras se despierta.
 
 ## Archivos
 
