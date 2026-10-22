@@ -24,7 +24,8 @@ jobs:
           node-version: 22
       # Without the web client (type 3) the app builds, but Google sign-in fails on the phone.
       - name: Comprobar la configuración de Firebase
-        run: grep -q '"client_type": 3' android/app/google-services.json || { echo "google-services.json no tiene el cliente de Google: descárgalo de nuevo desde Firebase."; exit 1; }
+        run: |
+          grep -q '"client_type": 3' android/app/google-services.json || { echo "google-services.json no tiene el cliente de Google: descárgalo de nuevo desde Firebase."; exit 1; }
       - name: Instalar dependencias
         run: npm ci
       - name: Preparar el juego dentro del proyecto Android
