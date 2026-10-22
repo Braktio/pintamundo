@@ -7,9 +7,9 @@ import { WebSocketServer } from 'ws';
 import { Hub } from './multiplayer.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
-const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
+const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon' };
 // Only the files the browser needs are public; tests, scripts and the server stay private.
-const PUBLIC = new Set(['/index.html', '/styles.css', '/game.js', '/engine.js', '/renderer.js', '/online.js', '/cloud.js', '/manifest.webmanifest']);
+const PUBLIC = new Set(['/index.html', '/styles.css', '/game.js', '/engine.js', '/renderer.js', '/online.js', '/cloud.js', '/manifest.webmanifest', '/favicon.ico']);
 const server = createServer(async (request, response) => {
   try {
     const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);

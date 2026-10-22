@@ -10,6 +10,10 @@ test('server delivers all modules without a build step', async () => {
       server.once('error', reject);
     });
     for (const path of ['/', '/styles.css', '/game.js', '/engine.js', '/renderer.js']) assert.equal((await fetch(base + path)).status, 200);
+    // Browsers ask for /favicon.ico on their own; it must exist and be served as an icon.
+    const favicon = await fetch(base + '/favicon.ico');
+    assert.equal(favicon.status, 200); assert.equal(favicon.headers.get('content-type'), 'image/x-icon');
+    assert.equal((await fetch(base + '/icons/favicon-32.png')).headers.get('content-type'), 'image/png');
     assert.equal((await fetch(base + '/missing.js')).status, 404);
   } finally { if (server.exitCode === null) { const exited = new Promise(resolve => server.once('exit', resolve)); server.kill(); await exited; } }
 });
