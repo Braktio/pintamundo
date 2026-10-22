@@ -118,11 +118,163 @@ const rarityChip = rarity => `<span class="rarity-chip rarity-${rarity}">${RARIT
 const powerIcons = powers => powers.length ? powers.map(p => `<span class="power-chip" title="${POWERS[p].name}">${POWERS[p].icon} ${POWERS[p].name}</span>`).join('') : '<span class="power-chip none">Sin poderes</span>';
 const totalChests = () => Object.values(profile.chests).reduce((a, b) => a + b, 0);
 const freeChestIn = () => Math.max(0, profile.freeChestAt - Date.now());
-// Chest artwork: the same chest, tinted per chest type.
-const CHEST_COLORS = { comun: ['#7fb8ff', '#4f86e8'], raro: ['#7be05a', '#3aa316'], epico: ['#d08cff', '#9b4fe0'], legendario: ['#ffe066', '#f2a400'] };
-function chestSVG(type, size = 100) {
-  const [lid, body] = CHEST_COLORS[type];
-  return `<svg viewBox="0 0 100 90" width="${size}" height="${size * .9}" aria-hidden="true"><path d="M10 38 Q10 12 50 12 Q90 12 90 38 Z" fill="${lid}" stroke="#1c2a6e" stroke-width="5" stroke-linejoin="round"/><rect x="10" y="38" width="80" height="44" rx="8" fill="${body}" stroke="#1c2a6e" stroke-width="5"/><rect x="44" y="12" width="12" height="70" fill="#ffd23a" stroke="#1c2a6e" stroke-width="4"/><circle cx="50" cy="44" r="12" fill="#fff" stroke="#1c2a6e" stroke-width="4"/><circle cx="46" cy="44" r="3.2" fill="#1c2a6e"/><circle cx="54" cy="44" r="3.2" fill="#1c2a6e"/><path d="M22 20 q6 -4 12 -2" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" opacity=".7"/></svg>`;
+// Cartoon Chest artwork with rich gradients, comic ink outlines and tiered rarity ornaments.
+const CHEST_THEMES = {
+  comun: {
+    lidGrad: ['#ea9e48', '#b5641e', '#7c3b0d'],
+    bodyGrad: ['#d7852c', '#a15014', '#662f08'],
+    trimGrad: ['#ffe57f', '#f9a825', '#b26a00'],
+    trimShadow: '#7a4200',
+    gemGrad: ['#ffd54f', '#ff8f00', '#c43e00'],
+    gemGlow: '#ffb300',
+    plankLine: '#572706'
+  },
+  raro: {
+    lidGrad: ['#38e4b7', '#17a589', '#0e6251'],
+    bodyGrad: ['#28cc9e', '#138d75', '#0b4f41'],
+    trimGrad: ['#ffffff', '#b2ebf2', '#4dd0e1', '#00838f'],
+    trimShadow: '#004d40',
+    gemGrad: ['#80deea', '#00e5ff', '#0097a7'],
+    gemGlow: '#00e5ff',
+    plankLine: '#083c31'
+  },
+  epico: {
+    lidGrad: ['#ba68c8', '#8e24aa', '#4a148c'],
+    bodyGrad: ['#ab47bc', '#7b1fa2', '#38006b'],
+    trimGrad: ['#fff59d', '#ffd54f', '#ff8f00', '#8c4b00'],
+    trimShadow: '#5d2b00',
+    gemGrad: ['#ff4081', '#f50057', '#880e4f'],
+    gemGlow: '#ff4081',
+    plankLine: '#270044'
+  },
+  legendario: {
+    lidGrad: ['#fff59d', '#ffd54f', '#f57f17', '#e65100'],
+    bodyGrad: ['#ffe082', '#ffb300', '#ef6c00', '#b23c00'],
+    trimGrad: ['#ffffff', '#fff9c4', '#ffca28', '#f57f17'],
+    trimShadow: '#7f2e00',
+    gemGrad: ['#ff1744', '#d50000', '#7f0000'],
+    gemGlow: '#ff1744',
+    plankLine: '#7c2500'
+  }
+};
+export function chestSVG(type, size = 100) {
+  const t = CHEST_THEMES[type] || CHEST_THEMES.comun;
+  const p = `cst_${type}`;
+  const h = Math.round(size * 0.84);
+
+  let emblem = '';
+  if (type === 'comun') {
+    emblem = `
+      <rect x="52" y="38" width="16" height="24" rx="4" fill="url(#${p}_trim)" stroke="#1c2a6e" stroke-width="3"/>
+      <circle cx="60" cy="46" r="3.5" fill="#1c2a6e"/>
+      <polygon points="58.5,46 61.5,46 62.5,55 57.5,55" fill="#1c2a6e"/>
+      <circle cx="60" cy="44" r="1.2" fill="#fff" opacity=".8"/>
+    `;
+  } else if (type === 'raro') {
+    emblem = `
+      <path d="M50 38 L70 38 L68 54 L60 62 L52 54 Z" fill="url(#${p}_trim)" stroke="#1c2a6e" stroke-width="3"/>
+      <polygon points="60,42 66,49 60,56 54,49" fill="url(#${p}_gem)" stroke="#1c2a6e" stroke-width="2"/>
+      <polygon points="60,44 64,49 60,53 56,49" fill="#e0f7fa" opacity=".85"/>
+      <circle cx="60" cy="49" r="6" fill="${t.gemGlow}" opacity=".35" filter="url(#${p}_blur)"/>
+    `;
+  } else if (type === 'epico') {
+    emblem = `
+      <path d="M46 42 Q38 34 36 46 Q44 48 50 46 Z" fill="url(#${p}_trim)" stroke="#1c2a6e" stroke-width="2.5"/>
+      <path d="M74 42 Q82 34 84 46 Q76 48 70 46 Z" fill="url(#${p}_trim)" stroke="#1c2a6e" stroke-width="2.5"/>
+      <path d="M50 38 L70 38 L68 56 L60 64 L52 56 Z" fill="url(#${p}_trim)" stroke="#1c2a6e" stroke-width="3"/>
+      <polygon points="60,41 67,49 60,58 53,49" fill="url(#${p}_gem)" stroke="#1c2a6e" stroke-width="2"/>
+      <polygon points="58,44 62,44 65,49 60,55 55,49" fill="#ff80ab" opacity=".7"/>
+      <circle cx="58" cy="46" r="1.5" fill="#fff"/>
+    `;
+  } else {
+    emblem = `
+      <g stroke="url(#${p}_trim)" stroke-width="3.5" stroke-linecap="round">
+        <line x1="60" y1="30" x2="60" y2="24"/>
+        <line x1="60" y1="68" x2="60" y2="74"/>
+        <line x1="38" y1="49" x2="32" y2="49"/>
+        <line x1="82" y1="49" x2="88" y2="49"/>
+        <line x1="44" y1="35" x2="39" y2="30"/>
+        <line x1="76" y1="35" x2="81" y2="30"/>
+        <line x1="44" y1="63" x2="39" y2="68"/>
+        <line x1="76" y1="63" x2="81" y2="68"/>
+      </g>
+      <circle cx="60" cy="49" r="14" fill="url(#${p}_trim)" stroke="#1c2a6e" stroke-width="3"/>
+      <polygon points="60,39 68,45 66,56 60,59 54,56 52,45" fill="url(#${p}_gem)" stroke="#1c2a6e" stroke-width="2"/>
+      <polygon points="60,42 65,46 64,53 60,55 56,53 55,46" fill="#ff8a80" opacity=".8"/>
+      <circle cx="58" cy="45" r="1.8" fill="#fff"/>
+    `;
+  }
+
+  const glint = (x, y, s = 1) => `
+    <g transform="translate(${x},${y}) scale(${s})">
+      <path d="M0 -7 Q0 0 7 0 Q0 0 0 7 Q0 0 -7 0 Q0 0 0 -7 Z" fill="#fff" opacity=".95"/>
+      <circle cx="0" cy="0" r="1.8" fill="${t.gemGlow}"/>
+    </g>
+  `;
+
+  return `<svg viewBox="0 0 120 100" width="${size}" height="${h}" aria-hidden="true" style="overflow:visible">
+  <defs>
+    <linearGradient id="${p}_lid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${t.lidGrad[0]}"/>
+      <stop offset="50%" stop-color="${t.lidGrad[1]}"/>
+      <stop offset="100%" stop-color="${t.lidGrad[2]}"/>
+    </linearGradient>
+    <linearGradient id="${p}_body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${t.bodyGrad[0]}"/>
+      <stop offset="60%" stop-color="${t.bodyGrad[1]}"/>
+      <stop offset="100%" stop-color="${t.bodyGrad[2]}"/>
+    </linearGradient>
+    <linearGradient id="${p}_trim" x1="0" y1="0" x2="0" y2="1">
+      ${t.trimGrad.map((c, i) => `<stop offset="${Math.round(i / (t.trimGrad.length - 1) * 100)}%" stop-color="${c}"/>`).join('')}
+    </linearGradient>
+    <linearGradient id="${p}_gem" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${t.gemGrad[0]}"/>
+      <stop offset="50%" stop-color="${t.gemGrad[1]}"/>
+      <stop offset="100%" stop-color="${t.gemGrad[2]}"/>
+    </linearGradient>
+    <linearGradient id="${p}_goldH" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="${t.trimGrad[0]}"/>
+      <stop offset="30%" stop-color="${t.trimGrad[1]}"/>
+      <stop offset="70%" stop-color="${t.trimGrad[2] || t.trimGrad[1]}"/>
+      <stop offset="100%" stop-color="${t.trimShadow}"/>
+    </linearGradient>
+    <filter id="${p}_blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+  <ellipse cx="60" cy="94" rx="48" ry="6" fill="#1c2a6e" opacity=".35"/>
+  <path d="M14 44 L106 44 L102 88 Q102 92 94 92 L26 92 Q18 92 18 88 Z" fill="url(#${p}_body)" stroke="#1c2a6e" stroke-width="4.5" stroke-linejoin="round"/>
+  <line x1="16" y1="60" x2="104" y2="60" stroke="${t.plankLine}" stroke-width="2.5" opacity=".7"/>
+  <line x1="17" y1="76" x2="103" y2="76" stroke="${t.plankLine}" stroke-width="2.5" opacity=".7"/>
+  <path d="M18 86 L102 86 L101 90 Q101 92 94 92 L26 92 Q19 92 19 90 Z" fill="url(#${p}_trim)" stroke="#1c2a6e" stroke-width="3"/>
+  <path d="M14 44 L26 44 L24 88 L18 88 Z" fill="url(#${p}_goldH)" stroke="#1c2a6e" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M106 44 L94 44 L96 88 L102 88 Z" fill="url(#${p}_goldH)" stroke="#1c2a6e" stroke-width="3.5" stroke-linejoin="round"/>
+  <rect x="52" y="44" width="16" height="46" fill="url(#${p}_goldH)" stroke="#1c2a6e" stroke-width="3.5"/>
+  <circle cx="21" cy="52" r="2.5" fill="#fff" stroke="#1c2a6e" stroke-width="2"/>
+  <circle cx="20" cy="80" r="2.5" fill="#fff" stroke="#1c2a6e" stroke-width="2"/>
+  <circle cx="99" cy="52" r="2.5" fill="#fff" stroke="#1c2a6e" stroke-width="2"/>
+  <circle cx="100" cy="80" r="2.5" fill="#fff" stroke="#1c2a6e" stroke-width="2"/>
+  <circle cx="60" cy="74" r="2.8" fill="#fff" stroke="#1c2a6e" stroke-width="2"/>
+  <circle cx="60" cy="84" r="2.8" fill="#fff" stroke="#1c2a6e" stroke-width="2"/>
+  <path d="M10 44 L110 44 L108 50 L12 50 Z" fill="#141d47" opacity=".4"/>
+  <path d="M10 42 C10 16 32 10 60 10 C88 10 110 16 110 42 Z" fill="url(#${p}_lid)" stroke="#1c2a6e" stroke-width="4.5" stroke-linejoin="round"/>
+  <path d="M16 32 C26 21 42 17 60 17 C78 17 94 21 104 32" fill="none" stroke="${t.plankLine}" stroke-width="2.5" opacity=".7"/>
+  <path d="M24 23 C34 16 46 13 60 13 C74 13 86 16 96 23" fill="none" stroke="${t.plankLine}" stroke-width="2" opacity=".6"/>
+  <path d="M10 42 C10 16 22 13 28 13 L36 15 C30 18 24 24 24 42 Z" fill="url(#${p}_goldH)" stroke="#1c2a6e" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M110 42 C110 16 98 13 92 13 L84 15 C90 18 96 24 96 42 Z" fill="url(#${p}_goldH)" stroke="#1c2a6e" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M52 10 C54 10 54 42 52 42 L68 42 C66 42 66 10 68 10 Z" fill="url(#${p}_goldH)" stroke="#1c2a6e" stroke-width="3.5"/>
+  <circle cx="21" cy="27" r="2.5" fill="#fff" stroke="#1c2a6e" stroke-width="2"/>
+  <circle cx="99" cy="27" r="2.5" fill="#fff" stroke="#1c2a6e" stroke-width="2"/>
+  <circle cx="60" cy="18" r="2.8" fill="#fff" stroke="#1c2a6e" stroke-width="2"/>
+  <circle cx="60" cy="30" r="2.8" fill="#fff" stroke="#1c2a6e" stroke-width="2"/>
+  <rect x="8" y="38" width="104" height="8" rx="3" fill="url(#${p}_trim)" stroke="#1c2a6e" stroke-width="4"/>
+  <path d="M22 18 C34 13 46 12 60 12 C74 12 86 13 98 18" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" opacity=".75"/>
+  <path d="M14 40 L106 40" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".6"/>
+  ${emblem}
+  ${type === 'legendario' ? glint(18, 14, 1.2) + glint(102, 16, 1) + glint(96, 78, 1.1) : ''}
+  ${type === 'epico' ? glint(22, 16, .9) + glint(98, 20, .9) : ''}
+  ${type === 'raro' ? glint(24, 18, .8) : ''}
+</svg>`;
 }
 const COLLECTION = {
   skins: { icon: '🐥', title: 'Personajes', note: 'Los comunes no tienen poderes. ¡Cuanto más raro, más poderes y más rápido se recargan!' },
@@ -163,6 +315,7 @@ function renderChests() {
   $('chest-shop').innerHTML = types.map(type => `<article class="card chest-slot chest-${type}"><div class="card-art">${chestSVG(type)}</div><button class="card-foot" data-buy="${type}" ${profile.bits >= CHESTS[type].price ? '' : 'disabled'}>${number(CHESTS[type].price)} ⭐</button></article>`).join('');
   $('chest-odds').innerHTML = types.map(type => `<div class="odds-row"><span class="odds-chest">${chestSVG(type, 40)}<b>${CHESTS[type].name}</b></span><span class="odds-values">${Object.entries(CHESTS[type].odds).map(([rarity, odds]) => `<span class="rarity-chip rarity-${rarity}">${RARITIES[rarity].name} ${odds}%</span>`).join('')}</span></div>`).join('');
   renderFreeChest();
+  const freeArt = document.querySelector('.free-chest-art'); if (freeArt && !freeArt.querySelector('svg')) freeArt.innerHTML = chestSVG('comun', 68);
 }
 function renderFreeChest() {
   const wait = freeChestIn(), hours = Math.floor(wait / 3600000), minutes = Math.ceil(wait % 3600000 / 60000);

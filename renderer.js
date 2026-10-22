@@ -172,57 +172,131 @@ export class Renderer {
     c.strokeStyle = '#ffffff80'; c.lineWidth = Math.max(2, band * .28); c.stroke(); c.restore();
   }
   // Characters face the viewer; only their pupils and nose follow the heading.
-  // Every character is assembled from its `look`: body shape, ears, extras and eyes.
+  // Every character is assembled with full cartoon volume, expressive eyes and bespoke traits.
   character(actor, arena, time, options = {}) {
     const c = this.ctx, s = this.scale * (options.size || 1), p = options.at || this.project(actor.x, actor.y);
-    if (p.x < -60 || p.x > this.width + 60 || p.y < -60 || p.y > this.height + 60) return;
-    const look = characterFor(actor.skin).look, rarity = actor.rarity || characterFor(actor.skin).rarity;
-    // "still" freezes the pose (cards); "idle" keeps bouncing and blinking but faces the viewer (menu mascot).
+    if (p.x < -80 || p.x > this.width + 80 || p.y < -80 || p.y > this.height + 80) return;
+    const skin = actor.skin || 'interceptor';
+    const charDef = characterFor(skin);
+    const look = charDef.look, rarity = actor.rarity || charDef.rarity;
     const r = s * .78, still = options.still || options.idle, id = actor.id || 0;
     const dx = still ? 0 : Math.cos(actor.angle), dy = still ? 0 : Math.sin(actor.angle);
-    const bounce = this.reduced || options.still ? 1 : 1 + Math.sin(time * (options.idle ? 4 : 11) + id * 1.7) * (options.idle ? .06 : .045);
-    const lw = Math.max(2.5, r * .12), extras = new Set(look.extras);
+    const bounce = this.reduced || options.still ? 1 : 1 + Math.sin(time * (options.idle ? 4 : 11) + id * 1.7) * (options.idle ? .05 : .04);
+    const lw = Math.max(2.8, r * .11), extras = new Set(look.extras);
+
     c.save(); c.translate(p.x, p.y);
     if (options.spin) c.rotate(options.spin);
     if (options.alpha !== undefined) c.globalAlpha = options.alpha;
-    // Legendary and mythic characters always carry a few orbiting sparkles.
+
+    // Legendary and mythic characters carry orbiting cartoon sparkle stars
     if ((rarity === 'legendario' || rarity === 'mitico') && !options.still) {
       c.fillStyle = RARITIES[rarity].color;
-      for (let i = 0; i < 3; i++) { const a = time * 2 + i * Math.PI * 2 / 3; star(c, Math.cos(a) * r * 1.55, Math.sin(a) * r * 1.2, r * .2, r * .09, a); c.fill(); }
+      for (let i = 0; i < 3; i++) {
+        const a = time * 2 + i * Math.PI * 2 / 3;
+        star(c, Math.cos(a) * r * 1.55, Math.sin(a) * r * 1.2, r * .22, r * .09, a);
+        c.fill();
+      }
     }
-    c.fillStyle = (actor.color || '#1c2a6e') + '55'; c.beginPath(); c.ellipse(0, r * .95, r * .95, r * .3, 0, 0, Math.PI * 2); c.fill();
+
+    // Soft cartoon ground shadow
+    c.fillStyle = '#1c2a6e30';
+    c.beginPath();
+    c.ellipse(0, r * 0.96, r * 0.94, r * 0.28, 0, 0, Math.PI * 2);
+    c.fill();
+
     if (arena?.active(actor, 'paint')) {
-      c.strokeStyle = actor.color; c.lineWidth = 3; c.setLineDash([6, 6]); c.lineDashOffset = -time * 30;
+      c.strokeStyle = actor.color; c.lineWidth = 3.5; c.setLineDash([6, 6]); c.lineDashOffset = -time * 30;
       c.beginPath(); c.ellipse(0, r * .9, r * 1.5, r * .55, 0, 0, Math.PI * 2); c.stroke(); c.setLineDash([]);
     }
     if (arena?.active(actor, 'dash')) {
-      c.strokeStyle = actor.color + 'aa'; c.lineWidth = 3; c.lineCap = 'round';
+      c.strokeStyle = actor.color + 'aa'; c.lineWidth = 3.5; c.lineCap = 'round';
       for (const offset of [-.45, 0, .45]) {
         const ox = -dy * offset * r, oy = dx * offset * r, from = 1.2 + Math.abs(offset), wobble = Math.sin(time * 30 + offset * 9) * .2;
         c.beginPath(); c.moveTo(ox - dx * r * from, oy - dy * r * from); c.lineTo(ox - dx * r * (from + .9 + wobble), oy - dy * r * (from + .9 + wobble)); c.stroke();
       }
     }
-    // Nose arrow (in the player's color) shows where the character is heading.
     if (!still) {
       c.fillStyle = actor.color || '#ffffff'; c.strokeStyle = INK; c.lineWidth = 2.5; c.lineJoin = 'round'; c.beginPath();
       c.moveTo(dx * r * 1.6, dy * r * 1.6); c.lineTo(dx * r * 1.15 - dy * r * .34, dy * r * 1.15 + dx * r * .34); c.lineTo(dx * r * 1.15 + dy * r * .34, dy * r * 1.15 - dx * r * .34); c.closePath(); c.fill(); c.stroke();
     }
+
     c.scale(1 / bounce, bounce);
-    c.lineWidth = lw; c.lineJoin = 'round'; c.lineCap = 'round'; c.strokeStyle = INK;
-    this.behind(look, extras, r, time);
-    this.ears(look, r, time, false);
-    this.bodyPath(look.shape, r, time); c.fillStyle = look.color; c.fill();
-    // Body decorations are clipped to the silhouette so they never spill out.
-    c.save(); this.bodyPath(look.shape, r, time); c.clip(); this.decorate(look, extras, r); c.restore();
-    this.bodyPath(look.shape, r, time); c.lineWidth = lw; c.stroke();
-    c.fillStyle = '#ffffffa0'; c.beginPath(); c.ellipse(-r * .5, -r * .55, r * .2, r * .1, -.7, 0, Math.PI * 2); c.fill();
-    this.face(actor, look, extras, r, time, dx, dy, options);
-    this.ears(look, r, time, true);
-    if (extras.has('helmet')) {
-      c.fillStyle = '#bfefff40'; c.lineWidth = lw * .8; c.beginPath(); c.arc(0, -r * .05, r * 1.22, 0, Math.PI * 2); c.fill(); c.stroke();
-      c.strokeStyle = '#ffffffd0'; c.lineWidth = r * .1; c.beginPath(); c.arc(0, -r * .05, r * 1.02, Math.PI * 1.15, Math.PI * 1.45); c.stroke();
-    }
+
+    // 1. Elements behind body: wings, manes, shells, saucer, tail, tentacles
+    this.behind(actor, look, extras, r, time);
+
+    // 2. Ears and headwear behind the body
+    this.ears(actor, look, r, time, false);
+
+    // 3. Volumetric body fill (3D cartoon radial gradient)
+    const baseColor = look.color;
+    const bodyGrad = c.createRadialGradient(-r * 0.32, -r * 0.38, r * 0.08, 0, 0, r * 1.18);
+    bodyGrad.addColorStop(0, shade(baseColor, 0.44));
+    bodyGrad.addColorStop(0.35, shade(baseColor, 0.14));
+    bodyGrad.addColorStop(0.75, baseColor);
+    bodyGrad.addColorStop(1, shade(baseColor, -0.32));
+    c.fillStyle = bodyGrad;
+    this.bodyPath(look.shape, r, time, skin);
+    c.fill();
+
+    // Soft bottom bounce lighting
+    const bounceGrad = c.createLinearGradient(0, r * 0.45, 0, r * 1.05);
+    bounceGrad.addColorStop(0, 'rgba(255,255,255,0)');
+    bounceGrad.addColorStop(1, shade(baseColor, 0.32) + '44');
+    c.fillStyle = bounceGrad;
+    this.bodyPath(look.shape, r, time, skin);
+    c.fill();
+
+    // 4. Body decorations (clipped to body silhouette)
+    c.save();
+    this.bodyPath(look.shape, r, time, skin);
+    c.clip();
+    this.decorate(actor, look, extras, r, time);
     c.restore();
+
+    // 5. Body cartoon ink outline
+    c.lineWidth = lw; c.lineJoin = 'round'; c.lineCap = 'round'; c.strokeStyle = INK;
+    this.bodyPath(look.shape, r, time, skin);
+    c.stroke();
+
+    // 6. Glossy specular shine along top-left dome curve
+    c.save();
+    this.bodyPath(look.shape, r, time, skin);
+    c.clip();
+    c.beginPath();
+    c.ellipse(-r * 0.25, -r * 0.48, r * 0.65, r * 0.38, -0.38, 0, Math.PI * 2);
+    const gloss = c.createLinearGradient(-r * 0.55, -r * 0.85, 0, 0);
+    gloss.addColorStop(0, 'rgba(255, 255, 255, 0.62)');
+    gloss.addColorStop(0.45, 'rgba(255, 255, 255, 0.16)');
+    gloss.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    c.fillStyle = gloss;
+    c.fill();
+    // Specular glint dot
+    c.fillStyle = 'rgba(255, 255, 255, 0.88)';
+    c.beginPath();
+    c.ellipse(-r * 0.44, -r * 0.52, r * 0.15, r * 0.08, -0.7, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+
+    // 7. Expressive cartoon face
+    this.face(actor, look, extras, r, time, dx, dy, options);
+
+    // 8. Headwear / ears in front of body (crown, unicorn horn, beret, tuft, headband)
+    this.ears(actor, look, r, time, true);
+
+    // Astronaut bubble helmet visor
+    if (extras.has('helmet')) {
+      c.fillStyle = '#bfefff38'; c.lineWidth = lw * .8; c.strokeStyle = INK;
+      c.beginPath(); c.arc(0, -r * .04, r * 1.22, 0, Math.PI * 2); c.fill(); c.stroke();
+      // Planetary curved glare reflection
+      c.strokeStyle = '#ffffffcc'; c.lineWidth = r * .11; c.lineCap = 'round';
+      c.beginPath(); c.arc(0, -r * .04, r * 1.02, Math.PI * 1.15, Math.PI * 1.48); c.stroke();
+      c.strokeStyle = '#ffffff88'; c.lineWidth = r * .06;
+      c.beginPath(); c.arc(0, -r * .04, r * 1.02, Math.PI * 1.54, Math.PI * 1.68); c.stroke();
+    }
+
+    c.restore();
+
     if (arena && actor.frozenUntil > arena.time) {
       c.save(); c.fillStyle = '#bfefffb0'; c.strokeStyle = INK; c.lineWidth = 3;
       c.beginPath(); c.roundRect(p.x - r * 1.35, p.y - r * 1.45, r * 2.7, r * 2.6, r * .4); c.fill(); c.stroke();
@@ -236,111 +310,676 @@ export class Renderer {
     }
     if (!options.at) this.label(actor.name, p.x, p.y - r * 1.85 - 8, actor.color);
   }
-  bodyPath(shape, r, time) {
+
+  bodyPath(shape, r, time, skin = '') {
     const c = this.ctx; c.beginPath();
-    if (shape === 'box') c.roundRect(-r, -r * .92, r * 2, r * 1.84, r * .38);
-    else if (shape === 'drop') { c.moveTo(0, -r * 1.25); c.bezierCurveTo(r * .55, -r * .6, r * 1.05, -r * .1, r * .95, r * .35); c.arc(0, r * .2, r * .96, .15, Math.PI - .15); c.bezierCurveTo(-r * 1.05, -r * .1, -r * .55, -r * .6, 0, -r * 1.25); }
-    else if (shape === 'ghost') {
-      c.moveTo(-r, r * .85); c.lineTo(-r, -r * .1); c.arc(0, -r * .1, r, Math.PI, 0); c.lineTo(r, r * .85);
-      for (let i = 0; i < 4; i++) c.quadraticCurveTo(r - (i + .5) * r / 2, r * (i % 2 ? .95 : .55) + Math.sin(time * 8 + i) * r * .06, r - (i + 1) * r / 2, r * .85);
-    } else c.arc(0, 0, r, 0, Math.PI * 2);
+    if (shape === 'box') {
+      c.roundRect(-r * 0.96, -r * 0.88, r * 1.92, r * 1.76, r * 0.38);
+    } else if (shape === 'drop') {
+      c.moveTo(0, -r * 1.25);
+      c.bezierCurveTo(r * 0.58, -r * 0.6, r * 1.06, -r * 0.08, r * 0.96, r * 0.38);
+      c.arc(0, r * 0.22, r * 0.96, 0.16, Math.PI - 0.16);
+      c.bezierCurveTo(-r * 1.06, -r * 0.08, -r * 0.58, -r * 0.6, 0, -r * 1.25);
+    } else if (shape === 'ghost') {
+      c.moveTo(-r * 0.96, r * 0.82);
+      c.lineTo(-r * 0.96, -r * 0.1);
+      c.arc(0, -r * 0.1, r * 0.96, Math.PI, 0);
+      c.lineTo(r * 0.96, r * 0.82);
+      for (let i = 0; i < 4; i++) {
+        c.quadraticCurveTo(r * (1 - (i + 0.5) * 0.5), r * (i % 2 ? 0.96 : 0.62) + Math.sin(time * 7 + i) * r * 0.06, r * (1 - (i + 1) * 0.5), r * 0.82);
+      }
+    } else {
+      // Chubby cartoon rounded pear (adorable cheeks and spherical base)
+      c.moveTo(0, -r * 0.96);
+      c.bezierCurveTo(r * 0.94, -r * 0.96, r * 1.08, r * 0.22, r * 0.96, r * 0.85);
+      c.bezierCurveTo(r * 0.88, r * 1.06, -r * 0.88, r * 1.06, -r * 0.96, r * 0.85);
+      c.bezierCurveTo(-r * 1.08, r * 0.22, -r * 0.94, -r * 0.96, 0, -r * 0.96);
+    }
     c.closePath();
   }
-  // Pieces drawn behind the body: wings, mane, saucer, fluff, rainbow.
-  behind(look, extras, r, time) {
-    const c = this.ctx;
-    if (extras.has('rainbow')) for (const [i, color] of ['#ff4f6d', '#ffd23a', '#6fdc3c', '#4fc3ff'].entries()) {
-      c.strokeStyle = INK; c.lineWidth = r * .24; c.beginPath(); c.arc(0, r * .1, r * (1.55 - i * .17), Math.PI * 1.05, Math.PI * 1.95); c.stroke();
-      c.strokeStyle = color; c.lineWidth = r * .15; c.stroke();
+
+  // Pieces drawn behind the body: wings, mane, saucer, fluff, rainbow, turtle shell, tail
+  behind(actor, look, extras, r, time) {
+    const c = this.ctx, skin = actor.skin || '', accent = look.accent;
+    const flap = Math.sin(time * 9) * 0.14;
+
+    // Rainbow arch
+    if (extras.has('rainbow') || skin === 'arcoiris') {
+      for (const [i, color] of ['#ff4f6d', '#ffd23a', '#6fdc3c', '#4fc3ff', '#b45cff'].entries()) {
+        c.strokeStyle = INK; c.lineWidth = r * 0.22; c.beginPath();
+        c.arc(0, r * 0.12, r * (1.62 - i * 0.16), Math.PI * 1.02, Math.PI * 1.98); c.stroke();
+        c.strokeStyle = color; c.lineWidth = r * 0.14; c.stroke();
+      }
     }
-    if (extras.has('mane')) { c.fillStyle = look.accent; c.beginPath(); for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, k = i % 2 ? 1.12 : 1.4; c.lineTo(Math.cos(a) * r * k, Math.sin(a) * r * k); } c.closePath(); c.fill(); c.lineWidth = Math.max(2, r * .09); c.stroke(); }
-    if (extras.has('fluff')) { c.fillStyle = look.color; c.lineWidth = Math.max(2, r * .09); for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; c.beginPath(); c.arc(Math.cos(a) * r * .95, Math.sin(a) * r * .95, r * .26, 0, Math.PI * 2); c.fill(); c.stroke(); } }
-    if (extras.has('wings')) {
-      const flap = Math.sin(time * 9) * .15; c.fillStyle = look.accent; c.lineWidth = Math.max(2, r * .1);
-      for (const side of [-1, 1]) { c.beginPath(); c.moveTo(side * r * .8, -r * .1); c.lineTo(side * r * 1.6, -r * (.6 + flap)); c.lineTo(side * r * 1.4, r * .3); c.closePath(); c.fill(); c.stroke(); }
+
+    // Turtle shell and little green feet
+    if (skin === 'tortuga') {
+      // Little cartoon feet
+      c.fillStyle = look.color; c.strokeStyle = INK; c.lineWidth = Math.max(2, r * 0.09);
+      for (const [fx, fy] of [[-r * 0.82, r * 0.72], [r * 0.82, r * 0.72], [-r * 0.65, -r * 0.6], [r * 0.65, -r * 0.6]]) {
+        c.beginPath(); c.ellipse(fx, fy, r * 0.24, r * 0.16, fx > 0 ? 0.35 : -0.35, 0, Math.PI * 2); c.fill(); c.stroke();
+      }
+      // Domed shell behind
+      const shellGrad = c.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 1.35);
+      shellGrad.addColorStop(0, '#3aa316'); shellGrad.addColorStop(1, '#1b5e08');
+      c.fillStyle = shellGrad; c.beginPath(); c.arc(0, 0, r * 1.25, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = INK; c.lineWidth = Math.max(3, r * 0.11); c.stroke();
+      // Hexagonal scute pattern on shell rim
+      c.strokeStyle = '#ffd23a'; c.lineWidth = r * 0.06;
+      for (let i = 0; i < 8; i++) {
+        const a = i / 8 * Math.PI * 2;
+        c.beginPath(); c.moveTo(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95);
+        c.lineTo(Math.cos(a) * r * 1.24, Math.sin(a) * r * 1.24); c.stroke();
+      }
     }
-    if (extras.has('saucer')) {
-      c.fillStyle = look.accent; c.lineWidth = Math.max(2, r * .1); c.beginPath(); c.ellipse(0, r * .38, r * 1.5, r * .45, 0, 0, Math.PI * 2); c.fill(); c.stroke();
-      c.fillStyle = '#ffd23a'; for (const x of [-1, 0, 1]) { c.beginPath(); c.arc(x * r, r * .48, r * .12, 0, Math.PI * 2); c.fill(); }
+
+    // Lion magnificent fluffy cartoon mane
+    if (skin === 'leon' || (extras.has('mane') && skin !== 'unicornio')) {
+      const maneGrad = c.createRadialGradient(0, 0, r * 0.7, 0, 0, r * 1.55);
+      maneGrad.addColorStop(0, '#ff9a1f'); maneGrad.addColorStop(0.7, '#d86608'); maneGrad.addColorStop(1, '#943b00');
+      c.fillStyle = maneGrad; c.lineWidth = Math.max(2.5, r * 0.1); c.strokeStyle = INK;
+      c.beginPath();
+      for (let i = 0; i < 16; i++) {
+        const a = i / 16 * Math.PI * 2, k = i % 2 ? 1.22 : 1.52;
+        c.lineTo(Math.cos(a) * r * k, Math.sin(a) * r * k);
+      }
+      c.closePath(); c.fill(); c.stroke();
+    }
+
+    // Unicorn flowing pastel mane
+    if (skin === 'unicornio') {
+      const maneColors = ['#ff8ad8', '#b45cff', '#7be0ff', '#ffd23a'];
+      c.lineWidth = Math.max(2.5, r * 0.09); c.strokeStyle = INK;
+      for (let i = 0; i < 4; i++) {
+        c.fillStyle = maneColors[i % maneColors.length];
+        c.beginPath();
+        c.ellipse(-r * 0.7 + i * r * 0.12, -r * 0.2 + i * r * 0.25, r * 0.32, r * 0.55, -0.5 + i * 0.15, 0, Math.PI * 2);
+        c.fill(); c.stroke();
+      }
+    }
+
+    // Fluff (Yeti)
+    if (extras.has('fluff') || skin === 'yeti') {
+      c.fillStyle = '#ffffff'; c.lineWidth = Math.max(2.5, r * 0.09); c.strokeStyle = INK;
+      for (let i = 0; i < 12; i++) {
+        const a = i / 12 * Math.PI * 2;
+        c.beginPath(); c.arc(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95, r * 0.28, 0, Math.PI * 2); c.fill(); c.stroke();
+      }
+    }
+
+    // Wings
+    if (extras.has('wings') || ['interceptor', 'patito', 'pinguino', 'buho', 'fenix', 'abeja', 'phoenix'].includes(skin)) {
+      c.lineWidth = Math.max(2.5, r * 0.1); c.strokeStyle = INK;
+
+      // Bee translucent fairy wings
+      if (skin === 'abeja') {
+        const wingFlap = Math.sin(time * 22) * 0.22;
+        c.fillStyle = 'rgba(215, 245, 255, 0.72)';
+        for (const side of [-1, 1]) {
+          c.beginPath();
+          c.ellipse(side * r * 0.92, -r * (0.65 + wingFlap), r * 0.38, r * 0.72, side * 0.45, 0, Math.PI * 2);
+          c.fill(); c.stroke();
+          // Inner wing vein highlight
+          c.strokeStyle = '#ffffffcc'; c.lineWidth = 2;
+          c.beginPath(); c.moveTo(side * r * 0.7, -r * 0.3); c.lineTo(side * r * 1.15, -r * 0.85); c.stroke();
+          c.strokeStyle = INK; c.lineWidth = Math.max(2.5, r * 0.1);
+        }
+      } else if (skin === 'fenix') {
+        // Blazing fiery wings
+        for (const side of [-1, 1]) {
+          const wingGrad = c.createLinearGradient(side * r * 0.5, 0, side * r * 1.6, -r * 0.8);
+          wingGrad.addColorStop(0, '#ffd23a'); wingGrad.addColorStop(0.5, '#ff5a1f'); wingGrad.addColorStop(1, '#c41200');
+          c.fillStyle = wingGrad;
+          c.beginPath();
+          c.moveTo(side * r * 0.75, r * 0.1);
+          c.quadraticCurveTo(side * r * 1.3, -r * (0.4 + flap), side * r * 1.7, -r * (0.8 + flap));
+          c.quadraticCurveTo(side * r * 1.45, -r * 0.1, side * r * 1.35, r * 0.4);
+          c.closePath(); c.fill(); c.stroke();
+        }
+      } else if (skin === 'phoenix') {
+        // Dragon emerald wings with golden membrane
+        for (const side of [-1, 1]) {
+          c.fillStyle = '#ffe9a8';
+          c.beginPath();
+          c.moveTo(side * r * 0.75, 0);
+          c.lineTo(side * r * 1.55, -r * (0.7 + flap));
+          c.lineTo(side * r * 1.4, r * 0.35);
+          c.closePath(); c.fill(); c.stroke();
+          // Outer dragon wing bone
+          c.strokeStyle = '#3aa316'; c.lineWidth = r * 0.12;
+          c.beginPath(); c.moveTo(side * r * 0.75, 0); c.lineTo(side * r * 1.55, -r * (0.7 + flap)); c.stroke();
+          c.strokeStyle = INK; c.lineWidth = Math.max(2.5, r * 0.1);
+        }
+      } else {
+        // Plump cartoon bird winglets (Pollito, Patito, Pingüi, Búho)
+        for (const side of [-1, 1]) {
+          c.save();
+          c.translate(side * r * 0.84, r * 0.22);
+          c.rotate(side * (0.2 + flap));
+          const wingGrad = c.createRadialGradient(-side * r * 0.1, -r * 0.1, 0, 0, 0, r * 0.45);
+          const wingCol = skin === 'pinguino' ? '#253366' : skin === 'patito' ? '#ffffff' : skin === 'buho' ? '#8c5932' : look.color;
+          wingGrad.addColorStop(0, shade(wingCol, 0.35));
+          wingGrad.addColorStop(1, shade(wingCol, -0.2));
+          c.fillStyle = wingGrad;
+          c.beginPath();
+          c.ellipse(0, 0, r * 0.26, r * 0.42, side * 0.15, 0, Math.PI * 2);
+          c.fill(); c.stroke();
+          c.restore();
+        }
+      }
+    }
+
+    // Saucer for UFO
+    if (extras.has('saucer') || skin === 'disc') {
+      const saucerGrad = c.createLinearGradient(0, r * 0.1, 0, r * 0.65);
+      saucerGrad.addColorStop(0, '#c9d6e8'); saucerGrad.addColorStop(1, '#673ab7');
+      c.fillStyle = saucerGrad; c.lineWidth = Math.max(3, r * 0.11); c.strokeStyle = INK;
+      c.beginPath(); c.ellipse(0, r * 0.42, r * 1.55, r * 0.46, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+      // Glowing porthole lights
+      for (const x of [-1.1, -0.55, 0, 0.55, 1.1]) {
+        c.fillStyle = '#ffd23a';
+        c.beginPath(); c.ellipse(x * r, r * 0.52, r * 0.14, r * 0.11, 0, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = INK; c.lineWidth = 2; c.stroke();
+      }
+    }
+
+    // Octopus tentacles
+    if (skin === 'pulpo') {
+      c.lineWidth = Math.max(2.5, r * 0.09); c.strokeStyle = INK;
+      for (let i = 0; i < 4; i++) {
+        const tx = (i - 1.5) * r * 0.52;
+        const tw = Math.sin(time * 6 + i) * r * 0.08;
+        c.fillStyle = look.color;
+        c.beginPath();
+        c.ellipse(tx + tw, r * 0.95, r * 0.2, r * 0.28, 0, 0, Math.PI * 2);
+        c.fill(); c.stroke();
+        // Little suction cup
+        c.fillStyle = '#ff8ad8';
+        c.beginPath(); c.circle ? c.circle(tx + tw, r * 1.02, r * 0.08) : c.arc(tx + tw, r * 1.02, r * 0.08, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+
+    // Tails (Fox, Cat, Shark)
+    if (skin === 'zorro') {
+      // Bushy fox tail with white tip
+      c.fillStyle = '#ff7a2a'; c.strokeStyle = INK; c.lineWidth = Math.max(2.5, r * 0.1);
+      c.beginPath();
+      c.ellipse(r * 1.05, r * 0.35, r * 0.45, r * 0.75, 0.65, 0, Math.PI * 2);
+      c.fill(); c.stroke();
+      c.fillStyle = '#ffffff';
+      c.beginPath();
+      c.ellipse(r * 1.32, -r * 0.08, r * 0.25, r * 0.32, 0.65, 0, Math.PI * 2);
+      c.fill(); c.stroke();
+    } else if (skin === 'tron') {
+      // Cat tail
+      c.strokeStyle = INK; c.lineWidth = r * 0.22; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(r * 0.7, r * 0.6); c.quadraticCurveTo(r * 1.35, r * 0.5, r * 1.25, 0); c.stroke();
+      c.strokeStyle = look.color; c.lineWidth = r * 0.14; c.stroke();
     }
   }
-  // Ears and headwear. `front` pieces sit on top of the head, others behind it.
-  ears(look, r, time, front) {
-    const c = this.ctx, type = look.ears, accent = look.accent, lw = Math.max(2, r * .1);
-    c.lineWidth = lw; c.fillStyle = look.color;
+
+  // Ears, crests and headwear
+  ears(actor, look, r, time, front) {
+    const c = this.ctx, type = look.ears, accent = look.accent, skin = actor.skin || '', lw = Math.max(2.5, r * .1);
+    c.lineWidth = lw; c.fillStyle = look.color; c.strokeStyle = INK;
     const tri = (a, b, d, fill) => { c.fillStyle = fill; c.beginPath(); c.moveTo(...a); c.lineTo(...b); c.lineTo(...d); c.closePath(); c.fill(); c.stroke(); };
+
     if (!front) {
-      if (type === 'cat') for (const side of [-1, 1]) { tri([side * r * .88, -r * .3], [side * r * .75, -r * 1.25], [side * r * .2, -r * .82], look.color); tri([side * r * .7, -r * .55], [side * r * .66, -r * 1], [side * r * .38, -r * .78], accent); }
-      if (type === 'bear') for (const side of [-1, 1]) { c.fillStyle = look.color; c.beginPath(); c.arc(side * r * .72, -r * .72, r * .32, 0, Math.PI * 2); c.fill(); c.stroke(); c.fillStyle = accent; c.beginPath(); c.arc(side * r * .72, -r * .72, r * .15, 0, Math.PI * 2); c.fill(); }
-      if (type === 'bunny') for (const side of [-1, 1]) { c.fillStyle = look.color; c.beginPath(); c.ellipse(side * r * .4, -r * 1.25, r * .22, r * .6, side * .15, 0, Math.PI * 2); c.fill(); c.stroke(); c.fillStyle = accent; c.beginPath(); c.ellipse(side * r * .4, -r * 1.22, r * .1, r * .4, side * .15, 0, Math.PI * 2); c.fill(); }
-      if (type === 'antenna') { c.beginPath(); c.moveTo(0, -r * .85); c.lineTo(0, -r * 1.4); c.stroke(); c.fillStyle = Math.sin(time * 6) > 0 ? accent : '#ffffff'; c.beginPath(); c.arc(0, -r * 1.45, r * .17, 0, Math.PI * 2); c.fill(); c.stroke(); }
-      if (type === 'fin') tri([-r * .35, -r * .8], [r * .15, -r * 1.55], [r * .4, -r * .78], look.color);
-      if (type === 'horns') for (const side of [-1, 1]) tri([side * r * .62, -r * .62], [side * r * .78, -r * 1.3], [side * r * .22, -r * .9], accent);
-      if (type === 'crest') for (const [i, x] of [-.35, 0, .35].entries()) tri([x * r - r * .18, -r * .8], [x * r + (i - 1) * r * .15, -r * (1.45 + (i === 1 ? .2 : 0)) + Math.sin(time * 8 + i) * r * .06], [x * r + r * .18, -r * .8], i === 1 ? accent : look.color);
-      if (type === 'crystal') for (const [i, x] of [-.45, 0, .45].entries()) tri([x * r - r * .2, -r * .75], [x * r, -r * (i === 1 ? 1.6 : 1.25)], [x * r + r * .2, -r * .75], i === 1 ? accent : '#bff4ff');
+      // Frog bulbous eye domes (Rana Zuzú)
+      if (skin === 'rana') {
+        for (const side of [-1, 1]) {
+          const domeGrad = c.createRadialGradient(side * r * 0.5, -r * 1.05, 0, side * r * 0.5, -r * 0.95, r * 0.4);
+          domeGrad.addColorStop(0, '#a6f04a'); domeGrad.addColorStop(1, '#4db814');
+          c.fillStyle = domeGrad;
+          c.beginPath(); c.arc(side * r * 0.5, -r * 0.88, r * 0.36, 0, Math.PI * 2); c.fill(); c.stroke();
+        }
+      }
+
+      // Pointed cat / fox / pig ears
+      if (type === 'cat' && skin !== 'cerdito') {
+        for (const side of [-1, 1]) {
+          const earGrad = c.createLinearGradient(side * r * 0.5, -r * 0.4, side * r * 0.75, -r * 1.25);
+          earGrad.addColorStop(0, look.color); earGrad.addColorStop(1, shade(look.color, 0.3));
+          tri([side * r * .88, -r * .3], [side * r * .76, -r * 1.26], [side * r * .2, -r * .82], earGrad);
+          tri([side * r * .7, -r * .55], [side * r * .66, -r * 1.02], [side * r * .36, -r * .78], '#ffa8cc');
+        }
+      }
+
+      // Pig cute folded ears
+      if (skin === 'cerdito') {
+        for (const side of [-1, 1]) {
+          c.fillStyle = '#ffa8cc';
+          c.beginPath(); c.ellipse(side * r * 0.72, -r * 0.75, r * 0.28, r * 0.38, side * 0.45, 0, Math.PI * 2); c.fill(); c.stroke();
+          c.fillStyle = '#ff6fa5';
+          c.beginPath(); c.ellipse(side * r * 0.7, -r * 0.72, r * 0.16, r * 0.24, side * 0.45, 0, Math.PI * 2); c.fill();
+        }
+      }
+
+      // Round volumetric ears (Bear, Mouse, Panda, Koala, Mole)
+      if (type === 'bear') {
+        const isMouse = skin === 'raton', isPanda = skin === 'panda', isKoala = skin === 'koala';
+        const earR = r * (isMouse || isKoala ? 0.44 : 0.34);
+        for (const side of [-1, 1]) {
+          const earGrad = c.createRadialGradient(side * r * 0.75, -r * 0.75, 0, side * r * 0.75, -r * 0.75, earR);
+          earGrad.addColorStop(0, shade(look.color, 0.25)); earGrad.addColorStop(1, shade(look.color, -0.15));
+          c.fillStyle = earGrad;
+          c.beginPath(); c.arc(side * r * 0.75, -r * 0.75, earR, 0, Math.PI * 2); c.fill(); c.stroke();
+          // Inner ear pad
+          c.fillStyle = isPanda ? '#1c2a6e' : isMouse ? '#ff9fc4' : isKoala ? '#ffffff' : accent;
+          c.beginPath(); c.arc(side * r * 0.75, -r * 0.75, earR * 0.56, 0, Math.PI * 2); c.fill();
+        }
+      }
+
+      // Tall bunny ears
+      if (type === 'bunny') {
+        for (const side of [-1, 1]) {
+          const bGrad = c.createLinearGradient(side * r * 0.4, -r * 0.5, side * r * 0.4, -r * 1.55);
+          bGrad.addColorStop(0, look.color); bGrad.addColorStop(1, shade(look.color, 0.25));
+          c.fillStyle = bGrad;
+          c.beginPath(); c.ellipse(side * r * .42, -r * 1.25, r * .24, r * .64, side * .15, 0, Math.PI * 2); c.fill(); c.stroke();
+          c.fillStyle = '#ff8fb0';
+          c.beginPath(); c.ellipse(side * r * .42, -r * 1.22, r * .12, r * .44, side * .15, 0, Math.PI * 2); c.fill();
+        }
+      }
+
+      // Antenna (Abeja, Robo, Cohete)
+      if (type === 'antenna') {
+        c.beginPath(); c.moveTo(0, -r * .85); c.lineTo(0, -r * 1.4); c.stroke();
+        c.fillStyle = Math.sin(time * 6) > 0 ? '#ffd23a' : '#ffffff';
+        c.beginPath(); c.arc(0, -r * 1.45, r * .18, 0, Math.PI * 2); c.fill(); c.stroke();
+      }
+
+      // Shark sleek dorsal fin
+      if (type === 'fin' || skin === 'tiburon') {
+        const finGrad = c.createLinearGradient(0, -r * 0.8, 0, -r * 1.6);
+        finGrad.addColorStop(0, look.color); finGrad.addColorStop(1, '#82b1ff');
+        c.fillStyle = finGrad;
+        c.beginPath();
+        c.moveTo(-r * 0.35, -r * 0.8);
+        c.quadraticCurveTo(0, -r * 1.25, r * 0.12, -r * 1.6);
+        c.quadraticCurveTo(r * 0.1, -r * 1.15, r * 0.42, -r * 0.78);
+        c.closePath(); c.fill(); c.stroke();
+      }
+
+      // Horns (Dragon, Owl tufts, Yeti)
+      if (type === 'horns') {
+        for (const side of [-1, 1]) {
+          const hornGrad = c.createLinearGradient(side * r * 0.5, -r * 0.6, side * r * 0.8, -r * 1.35);
+          hornGrad.addColorStop(0, accent); hornGrad.addColorStop(1, '#ffffff');
+          tri([side * r * .62, -r * .62], [side * r * .82, -r * 1.35], [side * r * .22, -r * .9], hornGrad);
+        }
+      }
+
+      // Crest (Fenix)
+      if (type === 'crest') {
+        for (const [i, x] of [-.35, 0, .35].entries()) {
+          const cGrad = c.createLinearGradient(x * r, -r * 0.8, x * r, -r * 1.5);
+          cGrad.addColorStop(0, '#ff5a1f'); cGrad.addColorStop(1, '#ffd23a');
+          tri([x * r - r * .18, -r * .8], [x * r + (i - 1) * r * .15, -r * (1.45 + (i === 1 ? .25 : 0)) + Math.sin(time * 8 + i) * r * .06], [x * r + r * .18, -r * .8], cGrad);
+        }
+      }
+
+      // Gem crystals (Golem)
+      if (type === 'crystal') {
+        for (const [i, x] of [-.45, 0, .45].entries()) {
+          const crGrad = c.createLinearGradient(x * r, -r * 0.75, x * r, -r * 1.5);
+          crGrad.addColorStop(0, '#00bcd4'); crGrad.addColorStop(1, '#e0f7fa');
+          tri([x * r - r * .2, -r * .75], [x * r, -r * (i === 1 ? 1.6 : 1.25)], [x * r + r * .2, -r * .75], crGrad);
+        }
+      }
       return;
     }
-    if (type === 'tuft') { c.fillStyle = accent; c.beginPath(); c.ellipse(-r * .1, -r * 1.02, r * .1, r * .26, -.4, 0, Math.PI * 2); c.ellipse(r * .12, -r * 1.05, r * .09, r * .22, .4, 0, Math.PI * 2); c.fill(); c.lineWidth = Math.max(1.5, r * .06); c.stroke(); }
-    if (type === 'halo') { c.strokeStyle = INK; c.lineWidth = r * .22; c.beginPath(); c.ellipse(0, -r * 1.3, r * .55, r * .18, 0, 0, Math.PI * 2); c.stroke(); c.strokeStyle = '#ffd23a'; c.lineWidth = r * .12; c.stroke(); c.strokeStyle = INK; }
-    if (type === 'crown') { c.fillStyle = '#ffd23a'; c.beginPath(); c.moveTo(-r * .55, -r * .78); c.lineTo(-r * .6, -r * 1.35); c.lineTo(-r * .28, -r * 1.08); c.lineTo(0, -r * 1.45); c.lineTo(r * .28, -r * 1.08); c.lineTo(r * .6, -r * 1.35); c.lineTo(r * .55, -r * .78); c.closePath(); c.fill(); c.stroke(); c.fillStyle = '#ff4f6d'; c.beginPath(); c.arc(0, -r * .98, r * .1, 0, Math.PI * 2); c.fill(); }
-    if (type === 'beret') { c.fillStyle = accent; c.beginPath(); c.ellipse(r * .1, -r * .9, r * .7, r * .28, -.2, 0, Math.PI * 2); c.fill(); c.stroke(); c.beginPath(); c.moveTo(r * .15, -r * 1.15); c.lineTo(r * .22, -r * 1.35); c.stroke(); }
-    if (type === 'unicorn') { tri([-r * .17, -r * .85], [0, -r * 1.7], [r * .17, -r * .85], '#ffd23a'); c.strokeStyle = '#ff8ad8'; c.lineWidth = r * .06; c.beginPath(); c.moveTo(-r * .1, -r * 1.05); c.lineTo(r * .1, -r * 1.15); c.moveTo(-r * .06, -r * 1.3); c.lineTo(r * .07, -r * 1.38); c.stroke(); c.strokeStyle = INK; }
+
+    // --- FRONT HEADWEAR ---
+
+    // Feather crest tuft (Pollito Pip, Patito Cuá)
+    if (type === 'tuft') {
+      for (const [idx, angle, scale] of [[-0.12, -0.3, 0.9], [0.12, 0.35, 1.05]]) {
+        c.save();
+        c.translate(angle * r * 0.38, -r * 0.95);
+        c.rotate(angle);
+        const tuftGrad = c.createLinearGradient(0, -r * 0.4 * scale, 0, 0);
+        tuftGrad.addColorStop(0, '#ffd23a'); tuftGrad.addColorStop(1, '#ff7a00');
+        c.fillStyle = tuftGrad; c.lineWidth = Math.max(2, r * 0.08); c.strokeStyle = INK;
+        c.beginPath(); c.ellipse(0, -r * 0.2 * scale, r * 0.11 * scale, r * 0.26 * scale, 0, 0, Math.PI * 2);
+        c.fill(); c.stroke();
+        c.fillStyle = '#ffffffbb';
+        c.beginPath(); c.ellipse(-r * 0.03, -r * 0.25 * scale, r * 0.04, r * 0.12 * scale, 0, 0, Math.PI * 2); c.fill();
+        c.restore();
+      }
+    }
+
+    // Halo (Burbujín)
+    if (type === 'halo') {
+      c.strokeStyle = INK; c.lineWidth = r * .24; c.beginPath(); c.ellipse(0, -r * 1.3, r * .56, r * .2, 0, 0, Math.PI * 2); c.stroke();
+      c.strokeStyle = '#ffd23a'; c.lineWidth = r * .14; c.stroke();
+      c.strokeStyle = '#ffffff'; c.lineWidth = r * .05; c.stroke();
+    }
+
+    // Royal 3-pointed golden crown with sparkling ruby (León Rey, Rey Arcoíris)
+    if (type === 'crown' || skin === 'leon' || skin === 'arcoiris') {
+      const crownGrad = c.createLinearGradient(0, -r * 1.45, 0, -r * 0.75);
+      crownGrad.addColorStop(0, '#fff59d'); crownGrad.addColorStop(0.5, '#ffd23a'); crownGrad.addColorStop(1, '#f57f17');
+      c.fillStyle = crownGrad; c.lineWidth = Math.max(2.5, r * 0.1); c.strokeStyle = INK;
+      c.beginPath();
+      c.moveTo(-r * 0.55, -r * 0.78);
+      c.lineTo(-r * 0.62, -r * 1.35);
+      c.lineTo(-r * 0.28, -r * 1.05);
+      c.lineTo(0, -r * 1.48);
+      c.lineTo(r * 0.28, -r * 1.05);
+      c.lineTo(r * 0.62, -r * 1.35);
+      c.lineTo(r * 0.55, -r * 0.78);
+      c.closePath(); c.fill(); c.stroke();
+      // Sparkling center ruby
+      c.fillStyle = '#ff1744';
+      c.beginPath(); c.arc(0, -r * 0.95, r * 0.14, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = INK; c.lineWidth = 2; c.stroke();
+      c.fillStyle = '#ffffff';
+      c.beginPath(); c.arc(-r * 0.04, -r * 0.98, r * 0.04, 0, Math.PI * 2); c.fill();
+    }
+
+    // Artist Beret (Pintor Rodi)
+    if (type === 'beret') {
+      const beretGrad = c.createRadialGradient(r * 0.15, -r * 1.1, 0, r * 0.1, -r * 0.9, r * 0.7);
+      beretGrad.addColorStop(0, '#5390ff'); beretGrad.addColorStop(1, '#1a4fc7');
+      c.fillStyle = beretGrad;
+      c.beginPath(); c.ellipse(r * .1, -r * .92, r * .72, r * .32, -.22, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.beginPath(); c.moveTo(r * .15, -r * 1.18); c.lineTo(r * .24, -r * 1.38); c.stroke();
+    }
+
+    // Unicorn golden spiral horn
+    if (type === 'unicorn' || skin === 'unicornio') {
+      const hornGrad = c.createLinearGradient(0, -r * 1.7, 0, -r * 0.85);
+      hornGrad.addColorStop(0, '#ffffff'); hornGrad.addColorStop(0.4, '#ffd23a'); hornGrad.addColorStop(1, '#ff9a1f');
+      tri([-r * .17, -r * .85], [0, -r * 1.7], [r * .17, -r * .85], hornGrad);
+      c.strokeStyle = '#ff8ad8'; c.lineWidth = r * .07; c.beginPath();
+      c.moveTo(-r * .1, -r * 1.05); c.lineTo(r * .1, -r * 1.15);
+      c.moveTo(-r * .06, -r * 1.3); c.lineTo(r * .07, -r * 1.38); c.stroke();
+      // Sparkle at tip
+      c.fillStyle = '#ffffff';
+      star(c, 0, -r * 1.72, r * 0.14, r * 0.05); c.fill();
+    }
+
+    // Ninja crimson headband
+    if (skin === 'ninja') {
+      c.fillStyle = '#ff1744'; c.lineWidth = Math.max(2.5, r * 0.09); c.strokeStyle = INK;
+      c.fillRect(-r * 1.1, -r * 0.75, r * 2.2, r * 0.28);
+      c.strokeRect(-r * 1.1, -r * 0.75, r * 2.2, r * 0.28);
+      // Trailing fluttering ribbons
+      c.beginPath();
+      c.moveTo(r * 1.05, -r * 0.65);
+      c.quadraticCurveTo(r * 1.45, -r * 0.8, r * 1.6, -r * 0.5);
+      c.lineTo(r * 1.55, -r * 0.38);
+      c.quadraticCurveTo(r * 1.35, -r * 0.6, r * 1.05, -r * 0.5);
+      c.closePath(); c.fill(); c.stroke();
+    }
   }
-  // Decorations painted on the body, clipped to its silhouette.
-  decorate(look, extras, r) {
-    const c = this.ctx, accent = look.accent;
-    c.fillStyle = extras.has('belly') ? accent : '#ffffff50';
-    c.beginPath(); c.ellipse(0, r * .45, r * .6, r * .45, 0, 0, Math.PI * 2); c.fill();
-    if (extras.has('spots')) { c.fillStyle = accent; for (const [x, y, k] of [[-.62, -.5, .16], [.66, .35, .17], [-.4, .66, .13], [.2, -.82, .14], [.72, -.35, .1]]) { c.beginPath(); c.arc(x * r, y * r, k * r, 0, Math.PI * 2); c.fill(); } }
-    if (extras.has('bands')) { c.fillStyle = accent; for (const y of [.35, .7]) c.fillRect(-r * 1.2, y * r, r * 2.4, r * .16); }
-    if (extras.has('stripes')) {
-      c.strokeStyle = shade(look.color, -.25); c.lineWidth = r * .12;
-      for (const x of [-.22, 0, .22]) { c.beginPath(); c.moveTo(x * r, -r * .98); c.lineTo(x * r * .8, -r * (x ? .62 : .55)); c.stroke(); }
-      for (const side of [-1, 1]) for (const y of [-.1, .15]) { c.beginPath(); c.moveTo(side * r * 1.02, y * r); c.lineTo(side * r * .78, y * r + r * .05); c.stroke(); }
+
+  // Decorations clipped to body silhouette
+  decorate(actor, look, extras, r, time) {
+    const c = this.ctx, accent = look.accent, skin = actor.skin || '';
+
+    // Belly patch
+    if (extras.has('belly') || ['pinguino', 'patito', 'osito', 'zorro', 'phoenix', 'buho', 'tiburon'].includes(skin)) {
+      const bellyCol = skin === 'pinguino' ? '#ffffff' : skin === 'phoenix' ? '#ffe9a8' : skin === 'tiburon' ? '#ffffff' : accent;
+      const bGrad = c.createLinearGradient(0, r * 0.1, 0, r * 0.95);
+      bGrad.addColorStop(0, bellyCol); bGrad.addColorStop(1, shade(bellyCol, -0.15));
+      c.fillStyle = bGrad;
+      c.beginPath(); c.ellipse(0, r * .48, r * .64, r * .46, 0, 0, Math.PI * 2); c.fill();
+    }
+
+    // Spots (Rana, Hongo, Pulpo)
+    if (extras.has('spots') || skin === 'rana' || skin === 'hongo' || skin === 'pulpo') {
+      c.fillStyle = skin === 'hongo' ? '#ffffff' : accent;
+      for (const [x, y, k] of [[-.62, -.5, .16], [.66, .35, .17], [-.4, .66, .13], [.2, -.82, .14], [.72, -.35, .1]]) {
+        c.beginPath(); c.arc(x * r, y * r, k * r, 0, Math.PI * 2); c.fill();
+        if (skin === 'hongo') { c.strokeStyle = INK; c.lineWidth = 2; c.stroke(); }
+      }
+    }
+
+    // Bumblebee black velvet stripes
+    if (skin === 'abeja' || extras.has('bands')) {
+      c.fillStyle = '#1c2a6e';
+      for (const y of [.18, .54]) {
+        c.fillRect(-r * 1.2, y * r, r * 2.4, r * .22);
+      }
+    }
+
+    // Gato Rayo electric lightning cheek stripes
+    if (skin === 'tron' || extras.has('stripes')) {
+      c.fillStyle = '#ffd23a'; c.strokeStyle = INK; c.lineWidth = 2;
+      for (const side of [-1, 1]) {
+        c.beginPath();
+        c.moveTo(side * r * 0.55, -r * 0.05);
+        c.lineTo(side * r * 0.95, -r * 0.15);
+        c.lineTo(side * r * 0.75, r * 0.1);
+        c.lineTo(side * r * 1.05, r * 0.02);
+        c.lineTo(side * r * 0.65, r * 0.25);
+        c.closePath(); c.fill(); c.stroke();
+      }
+    }
+
+    // Mapache bandit mask
+    if (skin === 'mapache' || extras.has('mask')) {
+      c.fillStyle = '#1c2a6e';
+      c.beginPath(); c.roundRect(-r * 1.15, -r * .48, r * 2.3, r * .56, r * .28); c.fill();
+      // White eye trim
+      c.strokeStyle = '#ffffff'; c.lineWidth = 3; c.stroke();
+    }
+
+    // Panda black eye patches
+    if (skin === 'panda' || extras.has('patches')) {
+      c.fillStyle = '#1c2a6e';
+      for (const side of [-1, 1]) {
+        c.beginPath(); c.ellipse(side * r * .38, -r * .16, r * .32, r * .42, side * .45, 0, Math.PI * 2); c.fill();
+      }
+    }
+
+    // Robot & Rocket digital screen visor
+    if (skin === 'rift' || skin === 'cohete') {
+      c.fillStyle = '#0f172a';
+      c.beginPath(); c.roundRect(-r * 0.75, -r * 0.55, r * 1.5, r * 0.85, r * 0.2); c.fill();
+      c.strokeStyle = INK; c.lineWidth = 3; c.stroke();
+    }
+
+    // Artist paint splatters (Pintor Rodi)
+    if (skin === 'pintor') {
+      const spots = [['#ff4081', -0.65, 0.45, 0.12], ['#00e5ff', 0.65, 0.42, 0.11], ['#ffd23a', -0.35, 0.72, 0.1]];
+      for (const [col, sx, sy, sr] of spots) {
+        c.fillStyle = col; c.beginPath(); c.arc(sx * r, sy * r, sr * r, 0, Math.PI * 2); c.fill();
+      }
+    }
+  }
+
+  // Cartoon expressive face: lively eyes with dual catchlights, blush, and personality
+  face(actor, look, extras, r, time, dx, dy, options) {
+    const c = this.ctx, id = actor.id || 0, eyes = look.eyes, skin = actor.skin || '', accent = look.accent || '#ffd23a';
+    const tri = (a, b, d, fill) => { c.fillStyle = fill; c.beginPath(); c.moveTo(...a); c.lineTo(...b); c.lineTo(...d); c.closePath(); c.fill(); c.stroke(); };
+    const blink = !this.reduced && !options.still && (time + id * .73) % 4 < .12;
+    const eye = r * (eyes === 'big' || skin === 'rana' || skin === 'buho' ? .34 : .29);
+    const ex = r * (skin === 'rana' ? .5 : .34);
+    const ey = -r * (skin === 'rana' ? .85 : .18);
+
+    c.lineWidth = Math.max(2, r * .07); c.strokeStyle = INK;
+
+    // Pupil renderer with cartoon dual sparkles
+    const pupil = (x, y, size, irisCol = INK) => {
+      const px = x + dx * size * .35, py = y + dy * size * .35;
+      const pr = size * 0.72;
+      c.fillStyle = irisCol;
+      c.beginPath(); c.arc(px, py, pr, 0, Math.PI * 2); c.fill();
+      // Primary big glossy catchlight circle (top-left)
+      c.fillStyle = '#ffffff';
+      c.beginPath(); c.arc(px - pr * 0.32, py - pr * 0.34, pr * 0.4, 0, Math.PI * 2); c.fill();
+      // Secondary smaller twinkle dot (bottom-right)
+      c.beginPath(); c.arc(px + pr * 0.38, py + pr * 0.38, pr * 0.2, 0, Math.PI * 2); c.fill();
+    };
+
+    if (options.dizzy) {
+      c.lineWidth = 3;
+      for (const side of [-1, 1]) {
+        c.beginPath(); c.moveTo(side * ex - eye * .7, ey - eye * .7); c.lineTo(side * ex + eye * .7, ey + eye * .7);
+        c.moveTo(side * ex + eye * .7, ey - eye * .7); c.lineTo(side * ex - eye * .7, ey + eye * .7); c.stroke();
+      }
+    } else if (eyes === 'cyclops' || skin === 'golem') {
+      // Glowing cyclops gem eye
+      const big = r * .44;
+      c.fillStyle = '#ffffff'; c.beginPath(); c.ellipse(0, ey, big, blink ? big * .15 : big, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+      if (!blink) pupil(0, ey, big, '#00bcd4');
+    } else {
+      for (const side of [-1, 1]) {
+        if (eyes === 'robot' || skin === 'rift' || skin === 'cohete') {
+          // Glowing digital LED eyes
+          c.fillStyle = '#00e5ff';
+          c.beginPath();
+          c.roundRect(side * ex - eye * 0.7, ey - eye * (blink ? 0.1 : 0.6), eye * 1.4, eye * (blink ? 0.2 : 1.2), eye * 0.3);
+          c.fill();
+        } else if (eyes === 'sleepy' && !blink) {
+          // Peaceful smiling curved closed eyes
+          c.lineWidth = Math.max(3, r * 0.1); c.strokeStyle = INK; c.lineCap = 'round';
+          c.beginPath();
+          c.arc(side * ex, ey, eye * 0.85, Math.PI * 1.15, Math.PI * 1.85); c.stroke();
+        } else {
+          // Sclera (eye white)
+          c.fillStyle = '#ffffff';
+          c.beginPath();
+          c.ellipse(side * ex, ey, eye, blink ? eye * .15 : eye * 1.15, 0, 0, Math.PI * 2);
+          c.fill(); c.stroke();
+
+          // Top eyelid shadow inside eye
+          if (!blink) {
+            c.save();
+            c.beginPath(); c.ellipse(side * ex, ey, eye, eye * 1.15, 0, 0, Math.PI * 2); c.clip();
+            c.fillStyle = 'rgba(28, 42, 110, 0.13)';
+            c.beginPath(); c.arc(side * ex, ey - eye * 0.42, eye * 1.05, 0, Math.PI); c.fill();
+            c.restore();
+
+            const iris = skin === 'buho' ? '#e69a00' : skin === 'unicornio' ? '#7b1fa2' : INK;
+            pupil(side * ex, ey, eye, iris);
+          }
+        }
+
+        // Expressive curved cartoon eyebrow above eye
+        if (eyes !== 'robot' && !blink) {
+          c.lineWidth = Math.max(2, r * 0.07); c.strokeStyle = INK; c.lineCap = 'round';
+          c.beginPath();
+          const tilt = side === -1 ? (skin === 'zorro' || skin === 'tron' ? -0.1 : 0.05) : (skin === 'zorro' || skin === 'tron' ? 0.1 : -0.05);
+          c.moveTo(side * ex - eye * 0.58, ey - eye * 1.35 + tilt * r);
+          c.quadraticCurveTo(side * ex, ey - eye * 1.62, side * ex + eye * 0.58, ey - eye * 1.32 - tilt * r);
+          c.stroke();
+        }
+      }
+    }
+
+    // Rosy blushing cheeks
+    if (look.shape !== 'box' && !extras.has('mask') && skin !== 'rana') {
+      for (const side of [-1, 1]) {
+        const blushGrad = c.createRadialGradient(side * r * 0.58, r * 0.18, 0, side * r * 0.58, r * 0.18, r * 0.22);
+        blushGrad.addColorStop(0, 'rgba(255, 80, 130, 0.68)');
+        blushGrad.addColorStop(1, 'rgba(255, 80, 130, 0)');
+        c.fillStyle = blushGrad;
+        c.beginPath(); c.ellipse(side * r * 0.58, r * 0.18, r * 0.2, r * 0.13, 0, 0, Math.PI * 2); c.fill();
+      }
+    }
+
+    // Beak or Snout
+    const beak = extras.has('beak') || ['interceptor', 'patito', 'pinguino', 'buho', 'fenix'].includes(skin);
+    const snout = extras.has('snout') || ['cerdito', 'osito', 'koala', 'topo', 'leon'].includes(skin);
+    const mouthY = snout ? r * .58 : r * .22;
+
+    if (snout) {
+      const isPig = skin === 'cerdito', isKoala = skin === 'koala';
+      const snoutGrad = c.createRadialGradient(0, r * 0.24, 0, 0, r * 0.28, r * 0.35);
+      snoutGrad.addColorStop(0, isKoala ? '#4a5568' : isPig ? '#ffbcd4' : accent);
+      snoutGrad.addColorStop(1, isKoala ? '#1a202c' : isPig ? '#ff7aa8' : shade(accent, -0.2));
+      c.fillStyle = snoutGrad;
+      c.beginPath(); c.ellipse(0, r * .28, r * (isKoala ? .26 : .34), r * (isKoala ? .32 : .22), 0, 0, Math.PI * 2);
+      c.fill(); c.stroke();
+
+      // Nostrils & highlight
+      c.fillStyle = isKoala ? '#000000' : INK;
+      for (const side of [-1, 1]) {
+        c.beginPath(); c.ellipse(side * r * .11, r * .28, r * .05, r * .06, 0, 0, Math.PI * 2); c.fill();
+      }
+      c.fillStyle = '#ffffffaa';
+      c.beginPath(); c.ellipse(-r * 0.08, r * 0.21, r * 0.08, r * 0.04, -0.2, 0, Math.PI * 2); c.fill();
+    }
+
+    if (beak) {
+      const isDuck = skin === 'patito';
+      const beakGrad = c.createLinearGradient(0, r * 0.12, 0, r * 0.44);
+      beakGrad.addColorStop(0, '#ffb822'); beakGrad.addColorStop(1, '#ff6a00');
+      c.fillStyle = beakGrad; c.lineWidth = Math.max(2.5, r * 0.08); c.strokeStyle = INK;
+      c.beginPath();
+      if (isDuck) {
+        // Broad duck bill
+        c.moveTo(-r * 0.3, r * 0.16);
+        c.quadraticCurveTo(0, r * 0.08, r * 0.3, r * 0.16);
+        c.quadraticCurveTo(r * 0.34, r * 0.38, 0, r * 0.44);
+        c.quadraticCurveTo(-r * 0.34, r * 0.38, -r * 0.3, r * 0.16);
+      } else {
+        // Chick / Bird curved beak
+        c.moveTo(-r * 0.2, r * 0.16);
+        c.quadraticCurveTo(0, r * 0.12, r * 0.2, r * 0.16);
+        c.quadraticCurveTo(r * 0.12, r * 0.36, 0, r * 0.44);
+        c.quadraticCurveTo(-r * 0.12, r * 0.36, -r * 0.2, r * 0.16);
+      }
+      c.closePath(); c.fill(); c.stroke();
+      // Beak top highlight
+      c.strokeStyle = '#ffffffaa'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(-r * 0.12, r * 0.19); c.quadraticCurveTo(0, r * 0.15, r * 0.12, r * 0.19); c.stroke();
       c.strokeStyle = INK;
     }
-    if (extras.has('mask')) { c.fillStyle = accent; c.beginPath(); c.roundRect(-r * 1.1, -r * .48, r * 2.2, r * .55, r * .25); c.fill(); }
-    if (extras.has('band')) { c.fillStyle = accent; c.fillRect(-r * 1.2, -r * .72, r * 2.4, r * .26); }
-    if (extras.has('patches')) { c.fillStyle = accent; for (const side of [-1, 1]) { c.beginPath(); c.ellipse(side * r * .36, -r * .16, r * .3, r * .38, side * .5, 0, Math.PI * 2); c.fill(); } }
-  }
-  face(actor, look, extras, r, time, dx, dy, options) {
-    const c = this.ctx, id = actor.id || 0, eyes = look.eyes;
-    const blink = !this.reduced && !options.still && (time + id * .73) % 4 < .12;
-    const eye = r * (eyes === 'big' ? .32 : .27), ex = r * .34, ey = -r * .18;
-    c.lineWidth = Math.max(1.5, r * .06); c.strokeStyle = INK;
-    const pupil = (x, y, size) => {
-      c.fillStyle = INK; c.beginPath(); c.arc(x + dx * size * .42, y + dy * size * .42, size * .55, 0, Math.PI * 2); c.fill();
-      c.fillStyle = '#ffffff'; c.beginPath(); c.arc(x + dx * size * .42 - size * .18, y + dy * size * .42 - size * .22, size * .18, 0, Math.PI * 2); c.fill();
-    };
-    if (options.dizzy) {
-      c.lineWidth = 2.5;
-      for (const side of [-1, 1]) { c.beginPath(); c.moveTo(side * ex - eye * .7, ey - eye * .7); c.lineTo(side * ex + eye * .7, ey + eye * .7); c.moveTo(side * ex + eye * .7, ey - eye * .7); c.lineTo(side * ex - eye * .7, ey + eye * .7); c.stroke(); }
-    } else if (eyes === 'cyclops') {
-      const big = r * .42; c.fillStyle = '#ffffff'; c.beginPath(); c.ellipse(0, ey, big, blink ? big * .15 : big, 0, 0, Math.PI * 2); c.fill(); c.stroke();
-      if (!blink) pupil(0, ey, big);
-    } else for (const side of [-1, 1]) {
-      c.fillStyle = '#ffffff'; c.beginPath();
-      if (eyes === 'robot') c.rect(side * ex - eye, ey - eye * (blink ? .15 : 1), eye * 2, eye * (blink ? .3 : 2));
-      else c.ellipse(side * ex, ey, eye, blink ? eye * .15 : eye * 1.15, 0, 0, Math.PI * 2);
-      c.fill(); c.stroke();
-      if (!blink) pupil(side * ex, ey, eye);
-      if (eyes === 'sleepy' && !blink) { c.fillStyle = look.color; c.beginPath(); c.ellipse(side * ex, ey - eye * .35, eye * 1.08, eye * .8, 0, Math.PI, 0); c.fill(); c.beginPath(); c.moveTo(side * ex - eye, ey - eye * .35); c.lineTo(side * ex + eye, ey - eye * .35); c.stroke(); }
-    }
-    const beak = extras.has('beak'), snout = extras.has('snout'), mouthY = snout ? r * .58 : r * .22;
-    if (snout) { c.fillStyle = look.accent; c.beginPath(); c.ellipse(0, r * .28, r * .32, r * .2, 0, 0, Math.PI * 2); c.fill(); c.stroke(); c.fillStyle = INK; for (const side of [-1, 1]) { c.beginPath(); c.arc(side * r * .1, r * .28, r * .05, 0, Math.PI * 2); c.fill(); } }
-    if (beak) { c.fillStyle = '#ff9a1f'; c.beginPath(); c.moveTo(-r * .2, r * .15); c.lineTo(r * .2, r * .15); c.lineTo(0, r * .42); c.closePath(); c.fill(); c.stroke(); }
-    // Mouth: a grin after a capture, an "o" while the paint trail is exposed.
-    if (!beak) {
+
+    // Mouth
+    if (!beak && eyes !== 'robot') {
       c.fillStyle = INK; c.lineWidth = Math.max(2, r * .08);
-      const worried = options.dizzy || (actor.trail?.length && !(this.moods[id] > 0)), happy = this.moods[id] > 0 || options.still || options.idle;
-      if (worried) { c.beginPath(); c.ellipse(0, mouthY + r * .14, r * .12, r * .16, 0, 0, Math.PI * 2); c.fill(); }
-      else if (happy) { c.beginPath(); c.arc(0, mouthY, r * (snout ? .2 : .3), 0, Math.PI); c.closePath(); c.fill(); c.fillStyle = '#ff7a9c'; c.beginPath(); c.ellipse(0, mouthY + r * (snout ? .13 : .2), r * (snout ? .09 : .14), r * .06, 0, 0, Math.PI * 2); c.fill(); }
-      else { c.beginPath(); c.arc(0, mouthY - r * .02, r * .25, .25, Math.PI - .25); c.stroke(); }
-      if (extras.has('teeth') && !worried) { c.fillStyle = '#ffffff'; c.lineWidth = Math.max(1, r * .04); for (const side of [-1, 1]) { c.beginPath(); c.rect(side * r * .1 - r * .07, mouthY, r * .14, r * .13); c.fill(); c.stroke(); } }
+      const worried = options.dizzy || (actor.trail?.length && !(this.moods[id] > 0));
+      const happy = this.moods[id] > 0 || options.still || options.idle;
+      if (worried) {
+        c.beginPath(); c.ellipse(0, mouthY + r * .14, r * .12, r * .16, 0, 0, Math.PI * 2); c.fill();
+      } else if (happy) {
+        // Cheerful cartoon grin with cute tongue
+        c.beginPath(); c.arc(0, mouthY, r * (snout ? .2 : .28), 0, Math.PI); c.closePath(); c.fill();
+        c.fillStyle = '#ff6088';
+        c.beginPath(); c.ellipse(0, mouthY + r * (snout ? .12 : .18), r * (snout ? .1 : .16), r * .08, 0, 0, Math.PI * 2); c.fill();
+      } else {
+        c.beginPath(); c.arc(0, mouthY - r * .02, r * .24, .25, Math.PI - .25); c.stroke();
+      }
+
+      // Buck teeth for Ratón & Conejo
+      if ((extras.has('teeth') || skin === 'raton' || skin === 'conejo') && !worried && skin !== 'tiburon') {
+        c.fillStyle = '#ffffff'; c.lineWidth = Math.max(1, r * .04);
+        for (const side of [-1, 1]) {
+          c.beginPath(); c.rect(side * r * .08 - r * .06, mouthY, r * .12, r * .13); c.fill(); c.stroke();
+        }
+      }
+
+      // Shark sharp teeth
+      if (skin === 'tiburon' && !worried) {
+        c.fillStyle = '#ffffff';
+        for (let i = -2; i <= 2; i++) {
+          tri([i * r * 0.1 - r * 0.04, mouthY], [i * r * 0.1, mouthY + r * 0.1], [i * r * 0.1 + r * 0.04, mouthY], '#ffffff');
+        }
+      }
     }
-    if (extras.has('mustache')) { c.strokeStyle = INK; c.lineWidth = r * .1; for (const side of [-1, 1]) { c.beginPath(); c.moveTo(0, r * .14); c.quadraticCurveTo(side * r * .3, r * .02, side * r * .42, r * .2); c.stroke(); } }
-    if (extras.has('whiskers')) { c.strokeStyle = INK; c.lineWidth = Math.max(1.5, r * .05); for (const side of [-1, 1]) for (const k of [-.1, .08]) { c.beginPath(); c.moveTo(side * r * .55, r * .18 + k * r); c.lineTo(side * r * 1.05, r * .1 + k * r * 2); c.stroke(); } }
-    if (look.shape !== 'box' && !extras.has('mask')) { c.fillStyle = '#ff8fb077'; for (const side of [-1, 1]) { c.beginPath(); c.ellipse(side * r * .62, r * .18, r * .16, r * .1, 0, 0, Math.PI * 2); c.fill(); } }
+
+    // Mustache for Pintor Rodi
+    if (extras.has('mustache') || skin === 'pintor') {
+      c.strokeStyle = INK; c.lineWidth = r * .1; c.lineCap = 'round';
+      for (const side of [-1, 1]) {
+        c.beginPath(); c.moveTo(0, r * .14); c.quadraticCurveTo(side * r * .32, r * .02, side * r * .44, r * .2); c.stroke();
+      }
+    }
+
+    // Whiskers for Cat, Rat, Fox
+    if (extras.has('whiskers') || skin === 'tron' || skin === 'raton' || skin === 'zorro') {
+      c.strokeStyle = INK; c.lineWidth = Math.max(1.5, r * .05); c.lineCap = 'round';
+      for (const side of [-1, 1]) for (const k of [-.08, .08]) {
+        c.beginPath(); c.moveTo(side * r * .54, r * .18 + k * r); c.lineTo(side * r * 1.05, r * .1 + k * r * 2.2); c.stroke();
+      }
+    }
   }
   label(text, x, y, color) {
     const c = this.ctx; c.font = `13px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle';
