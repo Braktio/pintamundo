@@ -156,6 +156,7 @@ El servidor público está en **https://pintamundo.onrender.com**, creado desde 
 - `game.js`: bucle, joystick multitáctil, HUD, audio, orientación, pantalla completa y persistencia.
 - `cloud.js`: inicio de sesión con Google y copia del perfil en Firestore (solo en la app).
 - `index.html` / `styles.css`: menú y HUD móvil horizontal.
+- `ui/`: iconos cartoon de la interfaz (pestañas, nivel, cofres, modo fácil, sonido, ayuda, inicio), recortados a 192×192 con fondo transparente. Para cambiar uno basta con reemplazar su PNG con el mismo nombre.
 - `server.mjs`: servidor local y de red sin dependencias.
 
 El renderizado limita DPR a 1,5 y partículas a 500. Fronteras y franjas de territorio se cachean al cambiar la cuadrícula. No hay imágenes ni bibliotecas externas. La fuente Baloo 2 se carga desde Google Fonts; sin conexión se usa una fuente del sistema.

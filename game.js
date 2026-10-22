@@ -92,7 +92,7 @@ function tone(kind = 'capture') {
 $('sound').onclick = () => {
   sound = !sound; $('sound').setAttribute('aria-pressed', String(sound));
   $('sound').setAttribute('aria-label', sound ? 'Desactivar sonido' : 'Activar sonido');
-  $('sound').textContent = sound ? '🔊' : '🔇'; tone('orb');
+  tone('orb');
 };
 function renderEasy() {
   $('easy').setAttribute('aria-pressed', String(profile.easy === true));
@@ -176,7 +176,6 @@ function renderMenu() {
   $('menu-level').textContent = level;
   $('menu-bits').textContent = number(profile.bits);
   $('menu-crates').textContent = totalChests();
-  $('menu-avatar').src = renderer.portraitURL({ skin: profile.skin, color: playerColor() });
   $('home-level').textContent = level; $('home-xp-label').textContent = xpText; $('home-xp').style.width = xpWidth;
   $('road-level').textContent = 'NIVEL ' + level; $('road-xp').textContent = xpText; $('xp-fill').style.width = xpWidth;
   document.querySelectorAll('[data-road]').forEach(el => {
@@ -201,7 +200,7 @@ function showScreen(name) {
   document.querySelectorAll('.tab[data-tab]').forEach(el => el.classList.toggle('current', el.dataset.tab === name));
   $('menu').dataset.screen = name;
   $('play').classList.toggle('home', name !== 'home');
-  $('play-icon').textContent = name === 'home' ? '▶' : '🏠';
+  $('play-icon').innerHTML = name === 'home' ? '▶' : '<img class="ui-icon" src="ui/home.png" alt="">';
   $('play').setAttribute('aria-label', name === 'home' ? '¡A jugar!' : 'Volver al inicio');
   document.querySelector('.screens').scrollTop = 0;
   renderMenu();

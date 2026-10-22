@@ -5,5 +5,5 @@ const FILES = ['index.html', 'styles.css', 'game.js', 'engine.js', 'renderer.js'
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 for (const file of FILES) await cp(new URL(file, root), new URL(file, out));
-for (const dir of ['fonts/', 'icons/']) await cp(new URL(dir, root), new URL(dir, out), { recursive: true });
+for (const dir of ['fonts/', 'icons/', 'ui/']) await cp(new URL(dir, root), new URL(dir, out), { recursive: true });
 console.log('www/ listo con ' + FILES.length + ' archivos, las fuentes y los iconos.');

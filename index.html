@@ -46,12 +46,12 @@
   <aside id="rotate-prompt" class="rotate-prompt"><span class="rotate-phone" aria-hidden="true">📱</span><h2 class="outlined">¡Gira el teléfono!</h2><p>Pintamundo se juega de lado.<br>Usa tus dos pulgares.</p></aside>
   <main id="menu" class="menu">
     <header class="topbar">
-      <button class="level-badge" data-tab="progress" aria-label="Ver mi progreso"><img id="menu-avatar" alt=""><span id="menu-level">1</span></button>
+      <button class="level-badge" data-tab="progress" aria-label="Ver mi progreso"><img class="ui-icon" src="ui/level.png" alt=""><span id="menu-level">1</span></button>
       <div class="currency"><span class="currency-icon" aria-hidden="true">⭐</span><strong id="menu-bits">0</strong></div>
-      <div class="currency"><span class="currency-icon" aria-hidden="true">🎁</span><strong id="menu-crates">0</strong></div>
+      <div class="currency"><span class="currency-icon" aria-hidden="true"><img class="ui-icon" src="ui/chest.png" alt=""></span><strong id="menu-crates">0</strong></div>
       <div class="topbar-actions">
-        <button id="easy" class="round-button" aria-pressed="false" aria-label="Modo fácil" title="Modo fácil">🐢</button>
-        <button id="sound" class="round-button" aria-pressed="false" aria-label="Activar sonido">🔇</button>
+        <button id="easy" class="round-button" aria-pressed="false" aria-label="Modo fácil" title="Modo fácil"><img class="ui-icon" src="ui/easy.png" alt=""></button>
+        <button id="sound" class="round-button" aria-pressed="false" aria-label="Activar sonido"><img class="ui-icon" src="ui/sound.png" alt=""></button>
       </div>
     </header>
     <div class="screens">
@@ -62,8 +62,8 @@
         <button id="online" class="online-button">🌐 Jugar en línea</button>
         <h1 class="outlined">¡Pinta el mundo<br>de tu color!</h1>
         <p class="home-tip">Sal de tu zona, dibuja un camino y vuelve a casa. ¡Que nadie toque tu camino!</p>
-        <div class="home-side left"><button class="side-badge" id="help-side" data-help><span>❓</span><b>Cómo<br>jugar</b></button></div>
-        <div class="home-side right"><button class="side-badge" data-tab="crates" id="free-crate-badge" hidden><span>🎁</span><b>¡Abre tus<br>cofres!</b></button><span class="side-badge easy-badge" id="easy-badge" hidden><span>🐢</span><b>Modo<br>fácil</b></span></div>
+        <div class="home-side left"><button class="side-badge" id="help-side" data-help><span><img class="ui-icon" src="ui/help.png" alt=""></span><b>Cómo<br>jugar</b></button></div>
+        <div class="home-side right"><button class="side-badge" data-tab="crates" id="free-crate-badge" hidden><span><img class="ui-icon" src="ui/chest.png" alt=""></span><b>¡Abre tus<br>cofres!</b></button><span class="side-badge easy-badge" id="easy-badge" hidden><span><img class="ui-icon" src="ui/easy.png" alt=""></span><b>Modo<br>fácil</b></span></div>
       </section>
       <section class="screen screen-crates" data-screen="crates" hidden>
         <div class="awning" aria-hidden="true"></div>
@@ -98,11 +98,11 @@
       </section>
     </div>
     <nav class="tabbar" aria-label="Menú principal">
-      <button class="tab" data-tab="crates"><span>🎁</span><b>Cofres</b></button>
-      <button class="tab" data-tab="collection"><span>🐥</span><b>Colección</b></button>
+      <button class="tab" data-tab="crates"><span><img class="ui-icon" src="ui/chest.png" alt=""></span><b>Cofres</b></button>
+      <button class="tab" data-tab="collection"><span><img class="ui-icon" src="ui/collection.png" alt=""></span><b>Colección</b></button>
       <button id="play" class="play-button" aria-label="¡A jugar!"><span id="play-icon">▶</span></button>
-      <button class="tab" data-tab="progress"><span>🧭</span><b>Progreso</b></button>
-      <button id="help" class="tab" data-help><span>❓</span><b>Ayuda</b></button>
+      <button class="tab" data-tab="progress"><span><img class="ui-icon" src="ui/trophy.png" alt=""></span><b>Progreso</b></button>
+      <button id="help" class="tab" data-help><span><img class="ui-icon" src="ui/help.png" alt=""></span><b>Ayuda</b></button>
     </nav>
   </main>
   <dialog id="dialog"><div id="dialog-content"></div></dialog>

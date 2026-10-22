@@ -56,6 +56,7 @@ try {
   assert.equal(await evaluate('document.getElementById("dialog").open'), false, 'Escape closes help');
   // Waits up to `ms` for a page expression to become true (the cloud check loads from the network).
   const until = async (expression, ms = 6000) => { for (let t = 0; t < ms && !await evaluate(expression); t += 100) await sleep(100); return evaluate(expression); };
+  assert.equal(await until('[...document.querySelectorAll("img.ui-icon")].every(i => i.complete && i.naturalWidth > 0)'), true, 'every interface icon loads');
   const screenshot = async name => { const shot = await page('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }); await writeFile(new URL(name, root), Buffer.from(shot.data, 'base64')); };
   await screenshot('preview-menu.png');
   for (const tab of ['collection', 'crates', 'progress']) {

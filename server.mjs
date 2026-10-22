@@ -15,7 +15,7 @@ const server = createServer(async (request, response) => {
     const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
     if (path === '/health') { response.writeHead(200, { 'Content-Type': 'text/plain' }); response.end('ok'); return; }
     const file = path === '/' ? '/index.html' : path;
-    if (!PUBLIC.has(file) && !/^\/fonts\/[a-z0-9-]+\.woff2$/.test(file) && !/^\/icons\/icon-\d+\.png$/.test(file)) throw new Error('not public');
+    if (!PUBLIC.has(file) && !/^\/fonts\/[a-z0-9-]+\.woff2$/.test(file) && !/^\/(icons|ui)\/[a-z0-9-]+\.png$/.test(file)) throw new Error('not public');
     const target = resolve(root, '.' + file), data = await readFile(target);
     response.writeHead(200, { 'Content-Type': types[extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
     response.end(data);
