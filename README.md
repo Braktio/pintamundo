@@ -241,7 +241,7 @@ Desde el inicio, **🌐 Jugar en línea** ofrece:
 - **⚡ Jugar rápido**: entra en una sala pública; arranca a los 10 segundos y los robots rellenan los huecos hasta 7 jugadores.
 - **👫 Crear sala para amigos**: genera un código (por ejemplo `GATO-42`); los amigos lo escriben en **Unirme** y el anfitrión (👑) pulsa **¡Empezar!**. Al terminar, todos vuelven a la misma sala.
 
-Las partidas en línea duran 3 minutos. El servidor ejecuta el mismo `engine.js` 90 veces por segundo y es la autoridad: decide cortes, conquistas y recargas. Los teléfonos solo envían su rumbo y los botones de poder, y reciben unas 20 actualizaciones por segundo con lo que cambió (casillas, estelas, posiciones). Si alguien sale a mitad de partida, un robot ocupa su lugar. El jugador atrapado mira hasta el final. Los cofres y estrellas se ganan igual que en solitario.
+Las partidas en línea no tienen límite de tiempo: terminan cuando ya no queda ningún jugador (todos atrapados o fuera) o cuando alguien pinta todo el mapa. Pintar más de la mitad es una victoria (3 estrellas), pero la partida sigue; si se atrapa a todos los robots, llegan hasta 3 nuevos. En solitario igual: termina al pintar todo el mapa o al ser atrapado. El servidor ejecuta el mismo `engine.js` 90 veces por segundo y es la autoridad: decide cortes, conquistas y recargas. Los teléfonos solo envían su rumbo y los botones de poder, y reciben unas 20 actualizaciones por segundo con lo que cambió (casillas, estelas, posiciones). Si alguien sale a mitad de partida, un robot ocupa su lugar. El jugador atrapado mira hasta el final. Los cofres y estrellas se ganan igual que en solitario.
 
 No hay chat. Cada jugador aparece con su nombre de perfil, ya limpio de símbolos en el servidor; quien no tiene nombre aparece con el de su personaje.
 
@@ -251,7 +251,7 @@ No hay chat. Cada jugador aparece con su nombre de perfil, ya limpio de símbolo
 2. Arranca el servidor: `node server.mjs`.
 3. En cada teléfono, conectado a la misma Wi-Fi, abre la dirección **En tu móvil** que imprime la terminal y pulsa **🌐 Jugar en línea**. El servidor se detecta solo.
 
-La APK y la versión de GitHub Pages se conectan solas al servidor público `wss://pintamundo.onrender.com/ws` (`PUBLIC_SERVER` en `online.js`). En **⚙️ Servidor** se puede escribir otro, por ejemplo `192.168.1.20:5173` para jugar con el PC en la misma Wi-Fi; se recuerda en cada dispositivo.
+Todos juegan en el servidor del juego, `wss://pintamundo.onrender.com/ws` (`PUBLIC_SERVER` en `online.js`): la APK, GitHub Pages y la web servida por Render. No hay forma de elegir otro. Solo la página servida por un servidor local de pruebas (`node server.mjs` en un PC) usa ese mismo servidor, para poder probar.
 
 Archivos: `multiplayer.mjs` (salas, códigos, relleno con robots y envío de cambios), `online.js` (conexión, réplica de la partida y suavizado en el teléfono) y `server.mjs` (sirve el juego, `/ws` para las partidas y `/health` para los servicios de alojamiento). La comprobación `node scripts/online-check.mjs "ruta/a/chrome.exe"` abre dos pestañas que juegan la misma partida. `node scripts/replay-check.mjs "ruta/a/chrome.exe"` juega una partida rápida de 6 s (`MATCH_SECONDS` acorta las partidas del servidor) y comprueba que «¡OTRA PARTIDA!» lleva a una sala nueva.
 
@@ -261,7 +261,7 @@ El proyecto Android (Capacitor 8) está en `android/`. En cada cambio en `main`,
 
 - La app va siempre en horizontal y a pantalla completa, con su icono y pantalla de carga (generados desde `assets/` con `npx capacitor-assets generate --android`).
 - Las fuentes van dentro del juego (`fonts/`), así que funciona sin internet en el modo de un jugador.
-- Para el modo en línea usa `PUBLIC_SERVER` de `online.js`; en **⚙️ Servidor** se puede escribir otro (por ejemplo, el del PC en la Wi-Fi).
+- Para el modo en línea usa siempre `PUBLIC_SERVER` de `online.js`.
 - Para construirla en local hace falta Java 21: `npm run android:sync` y luego `cd android && ./gradlew assembleRelease`.
 
 **Clave de firma:** está en `firma-android/` (fuera de git) y en los secretos del repositorio (`PINTAMUNDO_KEYSTORE_B64`, `PINTAMUNDO_KEYSTORE_PASSWORD`). Sin ella no se pueden publicar actualizaciones, tampoco en Google Play; guarda una copia de seguridad.

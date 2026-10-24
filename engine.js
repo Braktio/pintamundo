@@ -425,11 +425,11 @@ export class Arena {
     let roll = this.random() * pool.reduce((sum, c) => sum + BOT_WEIGHTS[c.rarity], 0);
     return pool.find(c => (roll -= BOT_WEIGHTS[c.rarity]) < 0) || pool.at(-1);
   }
-  // Solo: when every robot is out, a few new ones appear in unpainted space, away from the
-  // player, so the match can go on until the whole map is painted. They reuse the slots
+  // When every robot is out, a few new ones appear in unpainted space, away from the
+  // players, so the match can go on until the whole map is painted. They reuse the slots
   // of robots that are out. Without enough free space, nobody comes back.
   respawn() {
-    const player = this.actors[0], spots = [];
+    const players = this.actors.filter(a => a.human && a.alive), spots = [];
     const free = (x, y, radius) => {
       for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
         const cx = x + dx, cy = y + dy, index = cy * WIDTH + cx;
@@ -440,7 +440,7 @@ export class Arena {
     };
     for (let tries = 0; tries < 600 && spots.length < RESPAWN_BOTS; tries++) {
       const x = 5 + Math.floor(this.random() * (WIDTH - 10)), y = 5 + Math.floor(this.random() * (HEIGHT - 10));
-      if (Math.hypot(x - player.x, y - player.y) < 12 || spots.some(s => Math.hypot(s.x - x, s.y - y) < 12)) continue;
+      if (players.some(p => Math.hypot(x - p.x, y - p.y) < 12) || spots.some(s => Math.hypot(s.x - x, s.y - y) < 12)) continue;
       if (free(x, y, tries < 300 ? 5 : 4)) spots.push({ x, y });
     }
     const out = this.actors.filter(a => !a.human && !a.alive), taken = this.actors.filter(a => a.alive).map(a => characterFor(a.skin));
@@ -601,18 +601,18 @@ export class Arena {
     if (victim.human) {
       if (this.solo) this.finish(-1, reason);
       else { this.emit('out', { id: victim.id, reason }); if (!this.actors.some(a => a.human && a.alive)) this.finish(-1, '¡Atraparon a todos los jugadores!'); }
-    } else if (this.solo && !this.respawnAt && !this.actors.some(a => !a.human && a.alive)) this.respawnAt = this.time + RESPAWN_DELAY;
+    } else if (!this.respawnAt && !this.actors.some(a => !a.human && a.alive)) this.respawnAt = this.time + RESPAWN_DELAY;
     this.checkWin();
   }
-  // Solo: more than half the map is a victory, but the match goes on until the whole map
-  // is painted or the player is caught. Online: more than half ends the match.
+  // More than half the map is a victory (each player's own), but the match goes on. It only
+  // ends when the whole map is painted or, solo, when the player is caught and, online, when
+  // every player has been caught or has left. There is no time limit unless one is given.
   checkWin() {
     for (const actor of this.actors) if (actor.human) {
       actor.best = Math.max(actor.best, actor.count);
       if (this.ended) continue;
-      if (!this.solo) { if (actor.count / SIZE > .5) this.finish(actor.id, `¡${actor.name} pintó más de la mitad del mapa!`); continue; }
-      if (!this.won && actor.count / SIZE > .5) { this.won = true; this.emit('victory', { id: actor.id }); }
-      if (actor.count >= SIZE) this.finish(actor.id, '¡Pintaste todo el mapa!');
+      if (!actor.wonHalf && actor.count / SIZE > .5) { actor.wonHalf = true; if (actor.id === 0) this.won = true; this.emit('victory', { id: actor.id }); }
+      if (actor.count >= SIZE) this.finish(actor.id, this.solo ? '¡Pintaste todo el mapa!' : `¡${actor.name} pintó todo el mapa!`);
     }
   }
   visit(actor, index) {

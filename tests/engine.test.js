@@ -342,11 +342,27 @@ test('solo: more than half is a victory, but the match only ends at 100% or when
   full.checkWin();
   assert.ok(full.events.some(e => e.type === 'end' && e.won && /todo el mapa/.test(e.reason)));
 });
-test('online: more than half of the map ends the match', () => {
-  const arena = new Arena(freshProfile(), Math.random, { humans: [{ skin: 'tron', color: COLORS[0], name: 'Ana' }] });
+test('online: no time limit; half is a victory, the match ends when no player is left or the map is full', () => {
+  const humans = [{ skin: 'tron', color: COLORS[0], name: 'Ana' }, { skin: 'tron', color: COLORS[1], name: 'Beto' }];
+  const arena = new Arena(freshProfile(), Math.random, { humans });
+  assert.equal(arena.timeLimit, 0);
+  arena.time = 10000; arena.step(1 / 90);
+  assert.equal(arena.ended, false, 'time alone never ends it');
   for (let i = 0; i <= SIZE / 2; i++) arena.assign(i, 0);
   arena.checkWin();
-  assert.ok(arena.ended && arena.won);
+  assert.equal(arena.ended, false); assert.ok(arena.actors[0].wonHalf); assert.ok(arena.events.some(e => e.type === 'victory' && e.id === 0));
+  arena.kill(arena.actors[0], arena.actors[2]);
+  assert.equal(arena.ended, false, 'Beto is still playing');
+  arena.kill(arena.actors[1], arena.actors[2]);
+  assert.ok(arena.ended, 'nobody is left');
+  const full = new Arena(freshProfile(), Math.random, { humans });
+  for (let i = 0; i < SIZE; i++) full.assign(i, 1);
+  full.checkWin();
+  assert.ok(full.events.some(e => e.type === 'end' && /Beto pintó todo el mapa/.test(e.reason)));
+  // Robots come back online too.
+  const bots = new Arena(freshProfile(), Math.random, { humans });
+  for (const bot of bots.actors.filter(a => !a.human)) bots.kill(bot, bots.actors[0]);
+  assert.ok(bots.respawnAt > 0);
 });
 test('a paint shot paints a small disc where it lands and still catches exposed trails', () => {
   const arena = clean(), shooter = arena.actors[0];

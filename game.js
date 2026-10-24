@@ -1,6 +1,6 @@
 import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, tierStart, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonReward, CHARACTER_MAX_LEVEL, CHEST_BAR, PROGRESS_EPOCH, fillChestBar, levelChest, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
 import { Renderer, shade } from './renderer.js';
-import { Connection, Mirror, defaultServer, rememberServer, normalizeServer } from './online.js';
+import { Connection, Mirror, defaultServer } from './online.js';
 import * as cloud from './cloud.js';
 import { music } from './music.js';
 import { adReady, watchAd, preloadAd } from './ads.js';
@@ -508,11 +508,11 @@ function enterMatch() {
   $('pilot-avatar').src = renderer.portraitURL(arena.actors[0]);
   $('pilot-name').textContent = profile.name || 'Tú';
   $('leaders').innerHTML = arena.actors.map(actor => `<li data-actor="${actor.id}" class="${actor.id ? '' : 'me'}" style="--actor:${actor.color}"><img src="${renderer.portraitURL(actor)}" alt="${actor.name}"><i></i><b>0%</b></li>`).join('');
-  $('timer-pill').hidden = !mirror;
+  $('timer-pill').hidden = !mirror?.timeLimit;
   $('emote').hidden = !mirror; $('emote-bar').hidden = true;
-  // Solo matches go on to 100% (half is already a victory); online ones end at half.
-  goal = mirror ? 50 : 100;
-  $('goal-bar').setAttribute('aria-label', mirror ? 'Meta: pintar la mitad del mapa' : 'Meta: pintar todo el mapa');
+  // Matches go on to 100% (half is already a victory).
+  goal = 100;
+  $('goal-bar').setAttribute('aria-label', 'Meta: pintar todo el mapa');
   document.querySelectorAll('[data-milestone]').forEach((el, i) => { el.dataset.milestone = goal * (i + 1) / 5; el.classList.remove('reached'); });
   stopSpectating();
 }
@@ -554,7 +554,7 @@ function end(won, reason, ranking = null) {
   state = 'ending'; keys.clear();
   resetSteer(); renderHUD();
   // A solo victory (half the map) counts even if the player was caught or quit afterwards.
-  won = won || (!mirror && arena.won);
+  won = won || arena.won;
   const player = arena.actors[0], percent = arena.best / SIZE * 100, perfect = arena.best >= SIZE;
   profile.best = Math.max(profile.best, percent);
   // The stars of the match fill the chest bar; every ${CHEST_BAR} stars give a chest.
@@ -719,14 +719,15 @@ function processEvents() {
     if (event.type === 'ability' && event.id === 0) { tone('ability'); matchStats.powers++; }
     if (event.type === 'orb' && event.id === 0) { tone('orb'); matchStats.orbs++; }
     if (event.type === 'out' && event.id === 0) { announce('¡Te atraparon! 👀'); toast('Ahora miras la partida. Cambia de jugador con ◀ ▶.'); spectate(arena.lastKiller ?? -1); }
-    if (event.type === 'victory' && event.id === 0) { announce('🏆 ¡GANASTE! ¡Sigue hasta el 100%!'); tone('level'); }
+    if (event.type === 'victory' && event.id === 0) { arena.won = true; announce('🏆 ¡GANASTE! ¡Sigue hasta el 100%!'); tone('level'); }
     // New robots reuse the slots of caught ones: refresh their ranking avatar.
     if (event.type === 'spawn') {
       const actor = arena.actors[event.id], row = $('leaders').querySelector(`[data-actor="${event.id}"] img`);
       if (row) { row.src = renderer.portraitURL(actor); row.alt = actor.name; }
       if (spawnedAt !== arena.time) { spawnedAt = arena.time; announce('🤖 ¡Llegan robots nuevos!'); }
     }
-    if (event.type === 'end') end(event.won, event.reason, event.ranking);
+    // Online, the server's "won" is about its own player 0: this phone's victory is its own.
+    if (event.type === 'end') end(mirror ? false : event.won, event.reason, event.ranking);
   }
 }
 let wasSurging = false, goal = 100, spawnedAt = -1;
@@ -768,7 +769,7 @@ function renderHUD() {
   }
   $('no-powers').hidden = player.powers.length > 0;
   if (arena.follow !== undefined && !arena.actors[arena.follow]?.alive) spectate(-1);
-  if (mirror) { const left = Math.ceil(mirror.remaining()); $('hud-timer').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; }
+  if (mirror?.timeLimit) { const left = Math.ceil(mirror.remaining()); $('hud-timer').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; }
   const c = $('minimap').getContext('2d');
   c.clearRect(0, 0, 168, 144); c.fillStyle = '#ecfbf6'; c.fillRect(0, 0, 168, 144);
   for (let i = 0; i < SIZE; i++) if (arena.grid[i] >= 0) { c.fillStyle = arena.actors[arena.grid[i]].color + 'aa'; c.fillRect(i % WIDTH * 2, Math.floor(i / WIDTH) * 2, 2, 2); }
@@ -1172,8 +1173,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) void 
 // ---------- Online play ----------
 // Players are shown with their nickname and character. There is no chat.
 function openOnline() {
-  const server = defaultServer();
-  dialog(`<p class="eyebrow">🌐 Jugar en línea</p><h2>¡Juega con gente de todo el mundo!</h2><p>Si faltan jugadores, los robots ocupan su lugar. Los demás verán tu nombre y tu personaje.</p><div class="online-actions"><button id="online-quick" class="dialog-button">⚡ Jugar rápido</button><button id="online-create" class="dialog-button">👫 Crear sala para amigos</button><div class="join-row"><label for="online-code">¿Tu amigo ya creó una sala? Escribe su código:</label><input id="online-code" maxlength="8" placeholder="GATO-42" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="online-join" class="dialog-button">🚪 Unirme a la sala</button></div></div><details class="server-box" ${server ? '' : 'open'}><summary>⚙️ Servidor</summary><input id="online-server" value="${server}" placeholder="192.168.1.20:5173" autocomplete="off" aria-label="Dirección del servidor"><small>Cámbialo solo si juegas con un servidor propio.</small></details><div class="dialog-buttons"><button id="online-close" class="dialog-button secondary">Cancelar</button></div>`);
+  dialog(`<p class="eyebrow">🌐 Jugar en línea</p><h2>¡Juega con gente de todo el mundo!</h2><p>Si faltan jugadores, los robots ocupan su lugar. Los demás verán tu nombre y tu personaje.</p><div class="online-actions"><button id="online-quick" class="dialog-button">⚡ Jugar rápido</button><button id="online-create" class="dialog-button">👫 Crear sala para amigos</button><div class="join-row"><label for="online-code">¿Tu amigo ya creó una sala? Escribe su código:</label><input id="online-code" maxlength="8" placeholder="GATO-42" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="online-join" class="dialog-button">🚪 Unirme a la sala</button></div></div><div class="dialog-buttons"><button id="online-close" class="dialog-button secondary">Cancelar</button></div>`);
   $('online-quick').onclick = () => joinOnline('quick');
   $('online-create').onclick = () => joinOnline('create');
   $('online-join').onclick = () => joinOnline('join', $('online-code').value);
@@ -1181,8 +1181,7 @@ function openOnline() {
   $('online-close').onclick = () => $('dialog').close();
 }
 async function joinOnline(kind, code = '') {
-  const typed = $('online-server') ? normalizeServer($('online-server').value) : '', url = typed || online?.connection.url || defaultServer();
-  if (!url) { toast('Escribe la dirección del servidor en ⚙️ Servidor.'); return; }
+  const url = defaultServer();
   if (kind === 'join' && !code.trim()) { toast('Escribe el código de la sala de tu amigo.'); return; }
   if (!online || online.connection.url !== url || !online.connection.isOpen) {
     disconnect();
@@ -1200,7 +1199,6 @@ async function joinOnline(kind, code = '') {
     }
     if (!connection) { $('dialog').close(); toast('No pudimos conectar con el servidor. Revisa la dirección o inténtalo más tarde.'); return; }
     online = { connection, private: kind !== 'quick', lobby: null };
-    rememberServer(url);
   }
   online.private = kind !== 'quick'; online.lobby = null;
   const character = characterFor(profile.skin);

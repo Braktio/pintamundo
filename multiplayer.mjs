@@ -4,7 +4,8 @@ import { Arena, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, CHARACTER_MAX_LEVEL, SI
 
 export const STEP = 1 / 90;
 // 30 updates per second keep online movement smooth on phones.
-const DEFAULTS = { tickMs: 33, matchSeconds: 180, quickWait: 10, maxRooms: 200 };
+// Online matches have no time limit (matchSeconds 0); tests can set one to finish quickly.
+const DEFAULTS = { tickMs: 33, matchSeconds: 0, quickWait: 10, maxRooms: 200 };
 // Kid-friendly room codes such as GATO-42 (no Ñ or accents, easy to type).
 const WORDS = ['GATO', 'PATO', 'SAPO', 'LUNA', 'NUBE', 'OSO', 'PEZ', 'SOL', 'RANA', 'MONO', 'LEON', 'COCO', 'KIWI', 'FOCA', 'PUMA', 'ROSA', 'MAGO', 'FARO'];
 // Bits of the per-actor flag field in state messages.
@@ -138,7 +139,7 @@ class Room {
       const actor = arena.actors[id], percent = actor.best / SIZE * 100;
       return {
         client, uid: client.uid, name: cleanName(client.name) || actor.name.slice(0, 14), skin: client.skin,
-        stars: matchStars({ won: arena.winner === id, percent, kills: actor.kills }), kills: actor.kills, perfect: actor.best >= SIZE,
+        stars: matchStars({ won: !!actor.wonHalf, percent, kills: actor.kills }), kills: actor.kills, perfect: actor.best >= SIZE,
         place: order.indexOf(id) + 1, players: order.length,
         friends: this.isPrivate ? signed.filter(([other]) => other !== client).map(([other, i]) => ({ uid: other.uid, name: cleanName(other.name) || arena.actors[i].name.slice(0, 14) })) : []
       };

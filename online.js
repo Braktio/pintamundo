@@ -9,29 +9,16 @@ const FROZEN = 32, WALL = 64, HUMAN = 128;
 const DELAY = .1;
 // Same movement rules as the engine, used to predict the local player.
 const TURN_RATE = 6, PLAYER_SPEED = 4.8;
-const SERVER_KEY = 'pintamundo.server';
-
-// Public game server on the internet, used by GitHub Pages and by the Android app.
+// Public game server on the internet: the web game, the Android app and everyone else play there.
 export const PUBLIC_SERVER = 'wss://pintamundo.onrender.com/ws';
 // Inside the APK the page is served by Capacitor itself, not by our game server.
 const nativeApp = () => !!globalThis.Capacitor?.isNativePlatform?.();
-// Address of the game server: a saved choice first; served by our own Node server
-// (PC or Wi-Fi network) it is the same host; otherwise the public server.
+// Address of the game server. A page served by the game server itself (Render, or a local
+// test server on a PC) talks to that same server; everything else uses the public one.
+// There is no way to choose another server.
 export function defaultServer() {
-  try { const saved = localStorage.getItem(SERVER_KEY); if (saved) return saved; } catch { /* Storage may be blocked. */ }
   if (!nativeApp() && /^https?:$/.test(location.protocol) && !location.hostname.endsWith('github.io')) return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
   return PUBLIC_SERVER;
-}
-export function rememberServer(url) { try { localStorage.setItem(SERVER_KEY, url); } catch { /* Not critical. */ } }
-// Accepts "192.168.1.5:5173", "http://…", "https://…" or a full ws:// address.
-export function normalizeServer(text) {
-  let url = String(text || '').trim();
-  if (!url) return '';
-  if (/^https:\/\//i.test(url)) url = 'wss://' + url.slice(8);
-  else if (/^http:\/\//i.test(url)) url = 'ws://' + url.slice(7);
-  else if (!/^wss?:\/\//i.test(url)) url = 'ws://' + url;
-  url = url.replace(/\/+$/, '');
-  return /\/ws$/.test(url) ? url : url + '/ws';
 }
 
 export class Connection {
