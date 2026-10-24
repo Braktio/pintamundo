@@ -5,6 +5,7 @@ import { resolve, extname } from 'node:path';
 import { networkInterfaces } from 'node:os';
 import { WebSocketServer } from 'ws';
 import { Hub } from './multiplayer.mjs';
+import { createRanked } from './ranked.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon' };
@@ -23,7 +24,13 @@ const server = createServer(async (request, response) => {
 });
 
 // Online play: one WebSocket per phone at /ws. Small messages only; dead phones are dropped.
-const hub = new Hub();
+// Ranked play (trophies written by the server) needs the Firebase key in FIREBASE_SERVICE_ACCOUNT.
+let ranked = null;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  try { ranked = await createRanked(process.env.FIREBASE_SERVICE_ACCOUNT); console.log('Ranking en línea activado.'); }
+  catch (error) { console.error('Ranking en línea desactivado:', error.message); }
+}
+const hub = new Hub(ranked ? { verify: ranked.verify, onResult: results => ranked.record(results, (client, message) => hub.send(client, message)) } : {});
 const sockets = new WebSocketServer({ server, path: '/ws', maxPayload: 2048 });
 sockets.on('connection', socket => {
   socket.alive = true;

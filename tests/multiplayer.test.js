@@ -46,6 +46,25 @@ test('quick play fills with robots, streams state and ends by time', async () =>
   } finally { hub.close(); }
 });
 
+test('ranked results: only verified accounts, with stars, place and the friends met in private rooms', async () => {
+  const results = [];
+  const hub = new Hub({ tickMs: 20, matchSeconds: .4, verify: async token => token.startsWith('ok-') ? token.slice(3) : Promise.reject(new Error('bad')), onResult: list => results.push(...list) });
+  try {
+    const ana = phone(hub), beto = phone(hub), guest = phone(hub);
+    ana.send({ t: 'create', name: 'Ana', skin: 'tron', token: 'ok-uid-ana' });
+    const code = ana.last('lobby').code;
+    beto.send({ t: 'join', code, name: 'Beto', token: 'ok-uid-beto' });
+    guest.send({ t: 'join', code, name: 'Invitado', token: 'forged' });
+    await sleep(30);
+    ana.send({ t: 'start' });
+    await sleep(900);
+    assert.deepEqual(results.map(r => r.uid).sort(), ['uid-ana', 'uid-beto'], 'the forged token is unranked');
+    const ana2 = results.find(r => r.uid === 'uid-ana');
+    assert.deepEqual(ana2.friends, [{ uid: 'uid-beto', name: 'Beto' }]);
+    assert.equal(ana2.players, 7); assert.ok(ana2.place >= 1 && ana2.place <= 7);
+    assert.ok([0, 1, 2, 3].includes(ana2.stars));
+  } finally { hub.close(); }
+});
 test('private rooms: friends join by code, only the host starts, bad input is ignored', async () => {
   const hub = new Hub({ tickMs: 20, matchSeconds: 30 });
   try {

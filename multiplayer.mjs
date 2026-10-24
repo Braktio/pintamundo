@@ -1,6 +1,6 @@
 // Authoritative online rooms. The server runs the same engine as solo games and
 // streams compact deltas; phones only send their heading and power presses.
-import { Arena, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, CHARACTER_MAX_LEVEL, freshProfile, cleanName } from './engine.js';
+import { Arena, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, CHARACTER_MAX_LEVEL, SIZE, freshProfile, cleanName, matchStars } from './engine.js';
 
 export const STEP = 1 / 90;
 // 30 updates per second keep online movement smooth on phones.
@@ -128,7 +128,25 @@ class Room {
       this.hub.sendRaw(client, body + ',"me":' + JSON.stringify(ready) + '}');
     }
   }
+  // Ranked results of a finished match, one per connected player signed in with Google:
+  // the same stars as on the phone, catches, whether the map was full and the final place.
+  // In private rooms each player also learns who else played (they become friends).
+  results() {
+    const arena = this.arena, order = [...arena.actors].sort((a, b) => b.count - a.count || b.kills - a.kills).map(a => a.id);
+    const signed = [...this.ids].filter(([client]) => client.uid);
+    return signed.map(([client, id]) => {
+      const actor = arena.actors[id], percent = actor.best / SIZE * 100;
+      return {
+        client, uid: client.uid, name: cleanName(client.name) || actor.name.slice(0, 14), skin: client.skin,
+        stars: matchStars({ won: arena.winner === id, percent, kills: actor.kills }), kills: actor.kills, perfect: actor.best >= SIZE,
+        place: order.indexOf(id) + 1, players: order.length,
+        friends: this.isPrivate ? signed.filter(([other]) => other !== client).map(([other, i]) => ({ uid: other.uid, name: cleanName(other.name) || arena.actors[i].name.slice(0, 14) })) : []
+      };
+    });
+  }
   finish() {
+    const results = this.results();
+    if (results.length) this.hub.options.onResult?.(results);
     // Private rooms go back to their lobby so friends can play again; quick rooms close.
     this.arena = null; this.ids = new Map();
     if (this.isPrivate) { this.state = 'lobby'; setTimeout(() => { if (this.state === 'lobby') this.broadcastLobby(); }, 1200); }
@@ -155,7 +173,7 @@ export class Hub {
   constructor(options = {}) { this.options = { ...DEFAULTS, ...options }; this.rooms = new Map(); }
   // `socket` only needs send(text). Returns the handlers for incoming messages and close.
   connect(socket) {
-    const client = { socket, room: null, name: '', level: 1, skin: CHARACTERS[0].id, color: COLORS[0], easy: false, messages: 0, window: Date.now() };
+    const client = { socket, room: null, name: '', level: 1, uid: null, token: '', skin: CHARACTERS[0].id, color: COLORS[0], easy: false, messages: 0, window: Date.now() };
     return { message: raw => this.message(client, raw), close: () => client.room?.remove(client) };
   }
   sendRaw(client, text) { try { client.socket.send(text); } catch { /* A broken socket is cleaned up by its close event. */ } }
@@ -169,6 +187,12 @@ export class Hub {
     if (!data || typeof data.t !== 'string') return;
     if (data.t === 'quick' || data.t === 'create' || data.t === 'join') {
       client.room?.remove(client);
+      // A signed-in phone sends its Firebase ID token; the server checks it to know the
+      // player's account. Until it is verified (or without one) the match is unranked.
+      if (typeof data.token === 'string' && data.token.length < 4096 && this.options.verify && data.token !== client.token) {
+        const token = client.token = data.token; client.uid = null;
+        this.options.verify(token).then(uid => { if (client.token === token) client.uid = uid; }, () => { /* Unranked. */ });
+      }
       Object.assign(client, { name: cleanName(data.name), level: validLevel(data.level), skin: validSkin(data.skin), color: validColor(data.color), easy: data.easy === true });
     }
     if (data.t === 'quick') this.quick(client);

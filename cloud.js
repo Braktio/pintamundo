@@ -52,25 +52,39 @@ export async function download(uid) {
   else { const { store, db } = await loadWeb(); data = (await store.getDoc(store.doc(db, 'users', uid))).data(); }
   return typeof data?.profile === 'string' ? data.profile : null;
 }
-// Global ranking: one public row per signed-in player at ranking/{uid}, read by everyone.
-export async function publishRank(uid, profile) {
-  const data = { name: profile.name || 'Jugador', points: profile.points, skin: profile.skin, updatedAt: Date.now() };
-  if (nativeApp) await Store.setDocument({ reference: `ranking/${uid}`, data });
-  else { const { store, db } = await loadWeb(); await store.setDoc(store.doc(db, 'ranking', uid), data); }
+// The signed-in player's Firebase ID token, sent to the game server so it can rank the
+// player's online matches.
+export async function idToken() {
+  if (!available) return '';
+  if (nativeApp) return (await Auth.getIdToken()).token || '';
+  const { session } = await loadWeb();
+  return session.currentUser ? session.currentUser.getIdToken() : '';
 }
-// The best players, most trophies first: [{ uid, name, points, skin }].
-export async function topPlayers(limit = 50) {
+// World ranking of a season, ranking-YYYY-MM/{uid} ({ name, points, skin }), written only by
+// the game server and read by everyone. The best players first: [{ uid, name, points, skin }].
+export async function topPlayers(season, limit = 50) {
+  const reference = 'ranking-' + season;
   if (nativeApp) {
-    const { snapshots } = await Store.getCollection({ reference: 'ranking', queryConstraints: [{ type: 'orderBy', fieldPath: 'points', directionStr: 'desc' }, { type: 'limit', limit }] });
+    const { snapshots } = await Store.getCollection({ reference, queryConstraints: [{ type: 'orderBy', fieldPath: 'points', directionStr: 'desc' }, { type: 'limit', limit }] });
     return snapshots.map(s => ({ uid: s.id, ...s.data }));
   }
   const { store, db } = await loadWeb();
-  const result = await store.getDocs(store.query(store.collection(db, 'ranking'), store.orderBy('points', 'desc'), store.limit(limit)));
+  const result = await store.getDocs(store.query(store.collection(db, reference), store.orderBy('points', 'desc'), store.limit(limit)));
   return result.docs.map(d => ({ uid: d.id, ...d.data() }));
 }
+// One player's row in a season (null if they have not played it).
+export async function seasonRow(season, uid) {
+  if (nativeApp) { const { snapshot } = await Store.getDocument({ reference: `ranking-${season}/${uid}` }); return snapshot?.data ? { uid, ...snapshot.data } : null; }
+  const { store, db } = await loadWeb(), doc = await store.getDoc(store.doc(db, 'ranking-' + season, uid));
+  return doc.exists() ? { uid, ...doc.data() } : null;
+}
+// Several players' rows in a season (friends): the ones that exist.
+export async function seasonRows(season, uids) {
+  return (await Promise.all(uids.map(uid => seasonRow(season, uid).catch(() => null)))).filter(Boolean);
+}
 // Deletes everything the cloud keeps for this player: the saved profile and the ranking row.
-export async function deleteData(uid) {
-  for (const reference of [`users/${uid}`, `ranking/${uid}`]) {
+export async function deleteData(uid, season) {
+  for (const reference of [`users/${uid}`, `ranking/${uid}`, `ranking-${season}/${uid}`]) {
     if (nativeApp) await Store.deleteDocument({ reference });
     else { const { store, db } = await loadWeb(); await store.deleteDoc(store.doc(db, ...reference.split('/'))); }
   }

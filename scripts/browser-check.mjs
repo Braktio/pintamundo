@@ -76,7 +76,7 @@ try {
   // Opening Rangos without an account suggests connecting it, once.
   assert.equal(await evaluate('Boolean(document.getElementById("rank-suggest-login"))'), true, 'players without an account are invited to connect it');
   await evaluate('document.getElementById("rank-suggest-later").click()');
-  assert.match(await evaluate('document.getElementById("rank-list").textContent'), /Conéctala para rankear/);
+  assert.match(await evaluate('document.getElementById("rank-list").textContent'), /Conéctala y juega en línea para rankear/);
   await screenshot('preview-ranks.png');
   // Rare and better characters show their level, repeats and extra reach.
   await evaluate(`document.querySelector('.tab[data-tab="collection"]').click()`); await sleep(300);

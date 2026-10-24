@@ -628,3 +628,8 @@ body.in-match { touch-action:none; overscroll-behavior:none }
 .account-links a,.link-button { color:#fff6a8; text-decoration:underline }
 .link-button { padding:0; border:0; background:none; font:inherit; cursor:pointer }
 .dialog-button.danger-button { background:linear-gradient(#ff8aa0,var(--red)) }
+
+/* Ranked seasons */
+.rank-season { color:#fff6a8!important }
+.rank-hint { margin:6px 0; font-weight:800; color:#fff; text-align:center }
+.rank-tabs button { font-size:17px }

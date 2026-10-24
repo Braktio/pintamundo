@@ -1,4 +1,4 @@
-import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, rankChange, tierStart, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
+import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, tierStart, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonReward, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
 import { Renderer, shade } from './renderer.js';
 import { Connection, Mirror, defaultServer, rememberServer, normalizeServer } from './online.js';
 import * as cloud from './cloud.js';
@@ -546,16 +546,14 @@ function end(won, reason, ranking = null) {
   const player = arena.actors[0], percent = arena.best / SIZE * 100, perfect = arena.best >= SIZE;
   profile.best = Math.max(profile.best, percent);
   // Match reward: 1 star → common chest, 2 stars → rare chest, a win → epic chest.
-  const stars = won ? 3 : percent >= 20 ? 2 : percent >= 6 || player.kills ? 1 : 0;
+  const stars = matchStars({ won, percent, kills: player.kills });
   const prizeChest = [null, 'comun', 'raro', 'epico'][stars];
   if (won) profile.wins++;
   if (prizeChest) { profile.chests[prizeChest]++; matchChests.push({ type: prizeChest, reason: won ? '¡Victoria!' : '⭐'.repeat(stars) }); }
-  // Trophies for the ranked ladder; online, the final place counts too.
-  const before = rankFor(profile.points), change = rankChange({ stars, kills: player.kills, perfect, place: mirror && ranking ? ranking.indexOf(0) + 1 : 0, players: mirror && ranking ? ranking.length : 0 });
-  profile.points = Math.max(0, profile.points + change);
-  const after = rankFor(profile.points);
+  // Trophies only come from online matches: the server works them out and sends them.
+  const ranked = !!mirror && !!account;
   const completed = recordMatch(profile, today(), { kills: player.kills, percent, orbs: matchStats.orbs, powers: matchStats.powers, online: !!mirror, won });
-  save(true); publishRank();
+  save(true);
   for (const mission of completed) toast(`✅ Misión cumplida: ${mission.text}. ¡Reclámala en Misiones!`);
   void askNotifications();
   const currentGeneration = generation;
@@ -571,7 +569,7 @@ function end(won, reason, ranking = null) {
       $('to-menu').onclick = menu;
     };
     const opener = `<div class="dialog-buttons"><button class="dialog-button" id="open-earned">🎁 ¡ABRIR ${earned.length > 1 ? earned.length + ' COFRES' : 'COFRE'}!</button></div>`;
-    dialog(`<p class="eyebrow">${perfect ? '¡Pintaste todo el mapa!' : won ? '¡Pintaste más de la mitad!' : 'Fin de la partida'}</p><div class="result-stars" aria-label="${stars} de 3 estrellas">${[0, 1, 2].map(i => `<span class="${i < stars ? '' : 'off'}">⭐</span>`).join('')}</div><h2>${title}</h2><p>${perfect ? '¡Todo el mapa es de tu color!' : won ? '¡Más de la mitad del mapa es de tu color! ' + reason : reason}</p><div class="results"><div><strong>${Math.round(percent)}%</strong><small>🎨 Pintado</small></div><div><strong>${player.kills}</strong><small>🎯 Atrapados</small></div><div><strong>+${number(arena.bits)}</strong><small>⭐ Estrellas</small></div></div><p>+${number(arena.xp)} XP · Nivel ${levelFor(profile.xp)}</p>${rankResult(before, after, change)}${chests}${earned.length ? opener : actions}`);
+    dialog(`<p class="eyebrow">${perfect ? '¡Pintaste todo el mapa!' : won ? '¡Pintaste más de la mitad!' : 'Fin de la partida'}</p><div class="result-stars" aria-label="${stars} de 3 estrellas">${[0, 1, 2].map(i => `<span class="${i < stars ? '' : 'off'}">⭐</span>`).join('')}</div><h2>${title}</h2><p>${perfect ? '¡Todo el mapa es de tu color!' : won ? '¡Más de la mitad del mapa es de tu color! ' + reason : reason}</p><div class="results"><div><strong>${Math.round(percent)}%</strong><small>🎨 Pintado</small></div><div><strong>${player.kills}</strong><small>🎯 Atrapados</small></div><div><strong>+${number(arena.bits)}</strong><small>⭐ Estrellas</small></div></div><p>+${number(arena.xp)} XP · Nivel ${levelFor(profile.xp)}</p>${ranked ? '<div id="match-trophies" class="rank-result">🏆 Calculando copas…</div>' : `<p class="rank-hint">🏆 Las copas del ranking se ganan en partidas en línea${account ? '' : ' con tu cuenta de Google'}.</p>`}${chests}${earned.length ? opener : actions}`);
     tone(won ? 'level' : stars ? 'capture' : 'death');
     if (ranking) $('dialog-content').querySelector('h2').insertAdjacentHTML('afterend', `<p class="ranking-place">🏅 Quedaste en el puesto ${ranking.indexOf(0) + 1} de ${ranking.length}</p>`);
     if (!earned.length) { wire(); return; }
@@ -786,9 +784,45 @@ function rankResult(before, after, change) {
   const moved = after.tier > before.tier ? `<b class="rank-up">⬆️ ¡Subiste a ${after.name}!</b>` : after.tier < before.tier ? `<b class="rank-down">⬇️ Bajaste a ${after.name}</b>` : '';
   return `<div class="rank-result">${rankBadge(after.tier, 44)}<span>${change >= 0 ? '+' : ''}${change} 🏆 · <b>${after.name}</b>${moved}</span></div>`;
 }
-// Signed-in players keep their row of the global ranking up to date.
-function publishRank() { return account ? cloud.publishRank(account.uid, profile).catch(() => { /* Retried after the next match. */ }) : Promise.resolve(); }
+// Trophies of the current season, read from the ranking the server writes. Without a row
+// yet, the season has not been played: it starts from half of last season's trophies.
+async function refreshTrophies() {
+  if (!account) return;
+  try {
+    const row = await cloud.seasonRow(season, account.uid);
+    if (row) profile.points = Math.max(0, Math.floor(Number(row.points) || 0));
+    else { const last = await cloud.seasonRow(previousSeason(season), account.uid); if (last) profile.points = Math.floor((Number(last.points) || 0) / 2); }
+    save(); renderMenu();
+  } catch { /* Shown again after the next online match. */ }
+}
+// The server's answer after a ranked online match: new trophies and new friends.
+function onTrophies(message) {
+  const before = rankFor(profile.points);
+  profile.points = Math.max(0, Math.floor(Number(message.points) || 0));
+  for (const friend of message.friends || []) if (friend.uid !== account?.uid && !profile.friends.some(f => f.uid === friend.uid)) profile.friends.unshift({ uid: friend.uid, name: cleanName(friend.name) || 'Amigo' });
+  profile.friends = profile.friends.slice(0, 50);
+  save(true); leaderboard.at = 0; friendsBoard.at = 0;
+  const after = rankFor(profile.points);
+  if ($('match-trophies')) $('match-trophies').outerHTML = rankResult(before, after, message.change);
+  else toast(`🏆 ${message.change >= 0 ? '+' : ''}${message.change} copas · ${after.name}`);
+  if (message.friends?.length) toast(`👫 ${message.friends.map(f => cleanName(f.name) || 'Amigo').join(', ')} ya ${message.friends.length > 1 ? 'están' : 'está'} en tu ranking de amigos.`);
+}
+// When a season is over, its rank earns chests once: claimed the first time the game opens.
+async function claimSeasonReward() {
+  const last = previousSeason(season);
+  if (!account || profile.seasonClaimed === last) return;
+  let row;
+  try { row = await cloud.seasonRow(last, account.uid); } catch { return; }
+  profile.seasonClaimed = last;
+  if (!row) { save(); return; }
+  const points = Math.max(0, Math.floor(Number(row.points) || 0)), reward = seasonReward(points), info = rankFor(points);
+  for (const type of reward) profile.chests[type]++;
+  save(true); renderMenu();
+  dialog(`<p class="eyebrow">🏁 ${seasonName(last)}</p>${rankBadge(info.tier, 100)}<h2>¡Terminaste en ${info.name}!</h2><p>Con ${number(points)} 🏆. Tu premio de temporada:</p><div class="earned-chests">${reward.map(type => `<div class="prize-chest chest-${type}">${chestSVG(type, 56)}<b>${CHESTS[type].name}</b></div>`).join('')}</div><p>La nueva temporada empieza con la mitad de tus copas. ¡A subir!</p><div class="dialog-buttons"><button id="season-ok" class="dialog-button">¡GENIAL! 🎉</button></div>`);
+  tone('level'); $('season-ok').onclick = () => $('dialog').close();
+}
 // Where a player without an account would stand in the loaded ranking (0 if unknown).
+const season = seasonOf();
 const wouldPlace = () => leaderboard.status === 'ok' ? leaderboard.rows.filter(row => (Number(row.points) || 0) > profile.points).length + 1 : 0;
 // Players who open Rangos without an account are invited, once per visit to the game, to
 // connect it so their trophies count in the world ranking.
@@ -800,13 +834,34 @@ function suggestRankLogin() {
   $('rank-suggest-login').onclick = signIn;
   $('rank-suggest-later').onclick = () => $('dialog').close();
 }
-let rankTab = 'global', leaderboard = { status: 'idle', rows: [], at: 0 };
+let rankTab = 'global', leaderboard = { status: 'idle', rows: [], at: 0 }, friendsBoard = { status: 'idle', rows: [], at: 0 };
 async function loadLeaderboard(force = false) {
   if (!cloud.available || leaderboard.status === 'loading' || (!force && leaderboard.status === 'ok' && Date.now() - leaderboard.at < 60000)) return;
   leaderboard.status = 'loading'; renderRanks();
-  try { leaderboard = { status: 'ok', rows: await cloud.topPlayers(50), at: Date.now() }; }
+  try { leaderboard = { status: 'ok', rows: await cloud.topPlayers(season, 50), at: Date.now() }; }
   catch { leaderboard = { status: 'error', rows: [], at: 0 }; }
   renderRanks();
+}
+// Friends' rows in this season, plus your own, best first.
+async function loadFriends(force = false) {
+  if (!account || friendsBoard.status === 'loading' || (!force && friendsBoard.status === 'ok' && Date.now() - friendsBoard.at < 60000)) return;
+  friendsBoard.status = 'loading'; renderRanks();
+  try {
+    const rows = await cloud.seasonRows(season, [account.uid, ...profile.friends.map(f => f.uid)]);
+    for (const friend of profile.friends) if (!rows.some(r => r.uid === friend.uid)) rows.push({ uid: friend.uid, name: friend.name, points: 0, skin: 'interceptor' });
+    if (!rows.some(r => r.uid === account.uid)) rows.push({ uid: account.uid, name: profile.name, points: profile.points, skin: profile.skin });
+    friendsBoard = { status: 'ok', rows: rows.sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0)), at: Date.now() };
+  } catch { friendsBoard = { status: 'error', rows: [], at: 0 }; }
+  renderRanks();
+}
+// A ranking list (world or friends): place, character, rank emblem, name and trophies.
+function rankingList(rows) {
+  return `<ol class="world-ranking">${rows.map((row, i) => {
+    // Names come from other players' devices: only cleaned text reaches the page.
+    const points = Math.max(0, Math.floor(Number(row.points) || 0)), me = account && row.uid === account.uid;
+    const skin = CHARACTERS.some(c => c.id === row.skin) ? row.skin : 'interceptor';
+    return `<li class="${me ? 'me' : ''}"><span class="place">${i + 1}</span><img class="rank-avatar" src="${renderer.portraitURL({ skin, color: '#2fa8ff' }, 40)}" alt="">${rankBadge(rankFor(points).tier, 38)}<b>${cleanName(row.name) || 'Jugador'}${me ? ' (tú)' : ''}</b><span class="points">${number(points)} 🏆</span></li>`;
+  }).join('')}</ol>`;
 }
 function renderRanks() {
   const current = rankFor(profile.points);
@@ -816,7 +871,10 @@ function renderRanks() {
   $('rank-name').textContent = current.name;
   $('rank-points').textContent = current.next === null ? `${number(profile.points)} 🏆 · ¡Rango máximo!` : `${number(profile.points - current.start)} / ${number(current.next - current.start)} 🏆`;
   $('rank-fill').style.width = (current.next === null ? 100 : (profile.points - current.start) / (current.next - current.start) * 100) + '%';
+  const daysLeft = Math.max(1, Math.ceil((seasonEnd(season) - Date.now()) / 86400000));
+  $('rank-season').textContent = `${seasonName(season)} · termina en ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}`;
   $('rank-next').textContent = (current.next === null ? 'Eres una leyenda de Pintamundo.' : `Tienes ${number(profile.points)} 🏆. Siguiente: ${rankFor(current.next).name}`) + (account || !cloud.available ? '' : ' · Conecta tu cuenta para rankear');
+  if (rankTab === 'friends') { renderFriends(); return; }
   document.querySelectorAll('[data-ranks]').forEach(b => b.classList.toggle('selected', b.dataset.ranks === rankTab));
   if (rankTab === 'ladder') {
     $('rank-list').innerHTML = RANKS.map((rank, index) => `<div class="ladder-row">${[0, 1, 2].map(d => {
@@ -827,19 +885,21 @@ function renderRanks() {
   }
   if (!cloud.available) { $('rank-list').innerHTML = '<p class="rank-note">El ranking mundial está en la app y en el juego en internet.</p>'; return; }
   const place = wouldPlace();
-  const join = account ? '' : `<div class="rank-join"><p>🔒 Tus ${number(profile.points)} 🏆 aún no cuentan${place ? `: con tu cuenta estarías en el <b>puesto ${place}</b>` : ''}. ¡Conéctala para rankear!</p><button id="rank-login" class="dialog-button login google">Conectar con Google</button></div>`;
+  const join = account ? '<p class="rank-hint">🌐 Las copas se ganan en partidas en línea.</p>' : `<div class="rank-join"><p>🔒 Tus ${number(profile.points)} 🏆 aún no cuentan${place ? `: con tu cuenta estarías en el <b>puesto ${place}</b>` : ''}. ¡Conéctala y juega en línea para rankear!</p><button id="rank-login" class="dialog-button login google">Conectar con Google</button></div>`;
   const body = leaderboard.status === 'loading' || leaderboard.status === 'idle' ? '<p class="rank-note">Cargando el ranking… ⏳</p>'
     : leaderboard.status === 'error' ? '<p class="rank-note">No pudimos cargar el ranking. Revisa tu conexión.</p><div class="dialog-buttons"><button id="rank-retry" class="dialog-button secondary">🔄 Reintentar</button></div>'
     : !leaderboard.rows.length ? '<p class="rank-note">Todavía no hay nadie. ¡Sé el primero!</p>'
-    : `<ol class="world-ranking">${leaderboard.rows.map((row, i) => {
-        // Names come from other players' devices: only cleaned text reaches the page.
-        const points = Math.max(0, Math.floor(Number(row.points) || 0)), me = account && row.uid === account.uid;
-        const skin = CHARACTERS.some(c => c.id === row.skin) ? row.skin : 'interceptor';
-        return `<li class="${me ? 'me' : ''}"><span class="place">${i + 1}</span><img class="rank-avatar" src="${renderer.portraitURL({ skin, color: '#2fa8ff' }, 40)}" alt="">${rankBadge(rankFor(points).tier, 38)}<b>${cleanName(row.name) || 'Jugador'}${me ? ' (tú)' : ''}</b><span class="points">${number(points)} 🏆</span></li>`;
-      }).join('')}</ol>`;
+    : rankingList(leaderboard.rows);
   $('rank-list').innerHTML = join + body;
   if ($('rank-login')) $('rank-login').onclick = signIn;
   if ($('rank-retry')) $('rank-retry').onclick = () => loadLeaderboard(true);
+}
+// Friends: players met in private rooms while signed in.
+function renderFriends() {
+  if (!account) { $('rank-list').innerHTML = '<div class="rank-join"><p>👫 Conecta tu cuenta y juega salas de amigos: quienes jueguen contigo aparecerán aquí.</p><button id="rank-login" class="dialog-button login google">Conectar con Google</button></div>'; $('rank-login').onclick = signIn; return; }
+  if (!profile.friends.length) { $('rank-list').innerHTML = '<p class="rank-note">👫 Crea una sala de amigos en 🌐 Jugar en línea e invítalos: quienes jueguen contigo con su cuenta aparecerán aquí.</p>'; return; }
+  $('rank-list').innerHTML = friendsBoard.status === 'ok' ? rankingList(friendsBoard.rows) : friendsBoard.status === 'error' ? '<p class="rank-note">No pudimos cargar a tus amigos. Revisa tu conexión.</p>' : '<p class="rank-note">Cargando a tus amigos… ⏳</p>';
+  void loadFriends();
 }
 document.querySelectorAll('[data-ranks]').forEach(button => button.onclick = () => { rankTab = button.dataset.ranks; renderRanks(); });
 
@@ -891,7 +951,7 @@ function editName(first = false, suggestion = '') {
   $('name-save').onclick = () => {
     const name = cleanName(input.value);
     if (!name) { toast('Tu nombre necesita de 3 a 14 letras o números.'); input.focus(); return; }
-    profile.name = name; save(true); publishRank(); renderMenu(); $('dialog').close(); followInvite();
+    profile.name = name; save(true); renderMenu(); $('dialog').close(); followInvite();
     if (first) toast(`¡Hola, ${name}! 🎨`);
   };
   input.onkeydown = event => { if (event.key === 'Enter') $('name-save').click(); };
@@ -924,7 +984,7 @@ async function signIn() {
   await syncWithCloud(true);
   if (!account) return;
   // Right away in the world ranking, with the list refreshed if it is on screen.
-  await publishRank(); leaderboard.at = 0;
+  await refreshTrophies(); void claimSeasonReward(); leaderboard.at = 0; friendsBoard.at = 0;
   if (screen === 'ranks') void loadLeaderboard(true);
   toast('☁️ Conectado con Google.');
   if (!profile.name && state === 'menu' && !$('dialog').open) editName(true, cleanName(account.name.split(' ')[0]));
@@ -936,7 +996,7 @@ function confirmDeleteData() {
   $('delete-no').onclick = openAccount;
   $('delete-yes').onclick = async () => {
     $('dialog').close();
-    try { await cloud.deleteData(account.uid); } catch { toast('No se pudieron borrar los datos. Revisa tu conexión.'); return; }
+    try { await cloud.deleteData(account.uid, season); } catch { toast('No se pudieron borrar los datos. Revisa tu conexión.'); return; }
     leaderboard.at = 0; cloudDirty = false;
     try { await cloud.signOut(); } catch { /* The local session is dropped anyway. */ }
     account = null; renderAccount(); renderMenu();
@@ -1004,8 +1064,8 @@ async function restoreAccount() {
   renderAccount();
   if (!account) return;
   await syncWithCloud(false);
-  // Every signed-in player who opens the game appears in the world ranking, even before playing.
-  publishRank();
+  // Trophies of this season and, when a season ended, its reward.
+  await refreshTrophies(); void claimSeasonReward();
 }
 
 // ---------- Invite friends ----------
@@ -1118,7 +1178,8 @@ async function joinOnline(kind, code = '') {
   online.private = kind !== 'quick'; online.lobby = null;
   const character = characterFor(profile.skin);
   const skin = ownsCharacter(profile, character.id) ? character.id : 'interceptor';
-  online.connection.send({ t: kind, code, name: profile.name, level: characterLevel(profile, skin), skin, color: playerColor(), easy: profile.easy === true });
+  const token = account ? await cloud.idToken().catch(() => '') : '';
+  online.connection.send({ t: kind, code, token, name: profile.name, level: characterLevel(profile, skin), skin, color: playerColor(), easy: profile.easy === true });
 }
 function disconnect() {
   if (!online) return;
@@ -1138,6 +1199,7 @@ function onServerMessage(message) {
     return;
   }
   if (message.t === 'start') { startOnline(message); return; }
+  if (message.t === 'trophies') { onTrophies(message); return; }
   if (message.t === 'emote') { if (mirror) showEmote(mirror.map(message.a), message.e); return; }
   if (message.t === 'error') { toast(message.message); if (state === 'lobby') { state = 'menu'; $('dialog').close(); } }
 }

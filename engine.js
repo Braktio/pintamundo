@@ -115,6 +115,22 @@ export function rankFor(points) {
   const rank = RANKS[Math.floor(tier / 3)], division = tier % 3 + 1;
   return { tier, rank, division, name: `${rank.name} ${division}`, start: tierStart(tier), next: tier < TIERS - 1 ? tierStart(tier + 1) : null };
 }
+// Stars of a finished match (0–3): a win is 3, painting 20% is 2, 6% or one catch is 1.
+export const matchStars = ({ won, percent, kills }) => won ? 3 : percent >= 20 ? 2 : percent >= 6 || kills ? 1 : 0;
+// Ranked seasons last a calendar month (UTC): "2026-10". Each season keeps its own ranking;
+// a new one starts every player at half of their trophies from the previous season.
+export const FIRST_SEASON = '2026-10';
+export const seasonOf = (date = new Date()) => date.toISOString().slice(0, 7);
+export const previousSeason = season => { const [y, m] = season.split('-').map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`; };
+export const seasonEnd = season => { const [y, m] = season.split('-').map(Number); return new Date(Date.UTC(y, m, 1)); };
+const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+export const seasonName = season => `Temporada de ${MONTHS[Number(season.slice(5)) - 1]} ${season.slice(0, 4)}`;
+// Trophies a player starts a season with, from last season's row (or, in the first
+// season, from the ranking kept before seasons existed).
+export const seasonStart = (season, previous, legacy) => previous !== undefined ? Math.floor(previous / 2) : season === FIRST_SEASON && legacy !== undefined ? legacy : 0;
+// Chests for the rank reached when a season ends: better ranks, better chests.
+export const SEASON_REWARDS = [['comun'], ['raro'], ['raro', 'comun'], ['epico'], ['epico', 'raro'], ['epico', 'epico'], ['legendario'], ['legendario', 'epico'], ['legendario', 'legendario'], ['legendario', 'legendario', 'epico']];
+export const seasonReward = points => SEASON_REWARDS[Math.floor(rankFor(points).tier / 3)];
 // Trophies for one match: the stars earned, catches (up to 5), painting the whole map and,
 // online, the final place. Poor matches cost a few; the total never goes below zero.
 export function rankChange({ stars, kills = 0, perfect = false, place = 0, players = 0 }) {
@@ -215,7 +231,7 @@ export function crossedCells(x0, y0, x1, y1) {
 export const emptyChests = () => Object.fromEntries(Object.keys(CHESTS).map(type => [type, 0]));
 export function freshProfile() {
   // New players start with a rare chest so their first character with a power is one tap away.
-  return { version: 1, name: '', updatedAt: 0, points: 0, ranked: true, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], copies: {}, easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0, daily: { day: '', progress: {}, claimed: [], bonus: false }, streak: { last: '', count: 0 } };
+  return { version: 1, name: '', updatedAt: 0, points: 0, ranked: true, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], copies: {}, easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0, daily: { day: '', progress: {}, claimed: [], bonus: false }, streak: { last: '', count: 0 }, friends: [], seasonClaimed: '' };
 }
 // Player nicknames: 3 to 14 letters, digits, spaces, "_" or "-". Returns '' when unusable.
 export function cleanName(text) {
@@ -278,6 +294,10 @@ export function parseProfile(raw) {
     result.daily = { day: d.day, progress: {}, claimed: d.claimed.filter(id => id in MISSIONS), bonus: d.bonus === true };
     for (const [id, value] of Object.entries(d.progress)) if (id in MISSIONS && count(value)) result.daily.progress[id] = Math.min(1e4, Math.floor(value));
   }
+  // Friends: players met in private rooms ({ uid, name }), at most 50. Season rewards
+  // already claimed are remembered by season id.
+  if (Array.isArray(data.friends)) result.friends = data.friends.filter(f => f && typeof f.uid === 'string' && f.uid.length <= 128).slice(0, 50).map(f => ({ uid: f.uid, name: cleanName(f.name) || 'Amigo' }));
+  if (typeof data.seasonClaimed === 'string' && /^d{4}-d{2}$/.test(data.seasonClaimed)) result.seasonClaimed = data.seasonClaimed;
   const st = data.streak;
   if (st && day(st.last) && Number.isInteger(st.count) && st.count > 0 && st.count <= 1e5) result.streak = { last: st.last, count: st.count };
   return { ...result, name: cleanName(data.name), easy: data.easy === true, nemesis: typeof data.nemesis === 'string' ? data.nemesis.slice(0, 40) : '', skin: data.skin, trail: data.trail };
@@ -415,7 +435,7 @@ export class Arena {
   finish(winner, reason) {
     if (this.ended) return;
     // A solo victory (half the map) counts even if the player is caught afterwards.
-    this.ended = true; this.won = winner === 0 || (this.solo && this.won);
+    this.ended = true; this.won = winner === 0 || (this.solo && this.won); this.winner = winner;
     const ranking = [...this.actors].sort((a, b) => b.count - a.count || b.kills - a.kills).map(a => a.id);
     this.emit('end', { won: this.won, winner, reason, ranking });
   }

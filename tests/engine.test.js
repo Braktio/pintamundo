@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays } from '../engine.js';
+import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonStart, seasonReward, FIRST_SEASON } from '../engine.js';
 import { Renderer } from '../renderer.js';
 
 function clean(arena = new Arena()) {
@@ -291,6 +291,17 @@ test('daily streak: better rewards each day in a row, back to day 1 after a miss
   assert.equal(streakStatus(profile, '2026-10-24').count, 1, 'missing a day starts over');
   assert.deepEqual(parseProfile(JSON.stringify(profile)).streak, profile.streak);
   assert.equal(parseProfile(JSON.stringify({ ...profile, streak: { last: 'ayer', count: 3 } })).streak.count, 0, 'a broken streak is dropped');
+});
+test('seasons: monthly, starting at half of last season, with better chests for better ranks', () => {
+  assert.equal(seasonOf(new Date(Date.UTC(2026, 9, 23))), '2026-10');
+  assert.equal(previousSeason('2026-10'), '2026-09'); assert.equal(previousSeason('2027-01'), '2026-12');
+  assert.equal(seasonEnd('2026-12').toISOString(), '2027-01-01T00:00:00.000Z');
+  assert.equal(seasonName('2026-11'), 'Temporada de noviembre 2026');
+  assert.equal(seasonStart('2026-11', 301), 150, 'half of last season');
+  assert.equal(seasonStart(FIRST_SEASON, undefined, 174), 174, 'the first season keeps the old ranking');
+  assert.equal(seasonStart('2026-12', undefined, 174), 0, 'later seasons start from zero without a previous row');
+  assert.deepEqual(seasonReward(0), ['comun']); assert.equal(seasonReward(1e6).length, 3);
+  assert.deepEqual([matchStars({ won: true }), matchStars({ percent: 25 }), matchStars({ percent: 1, kills: 1 }), matchStars({ percent: 1 })], [3, 2, 1, 0]);
 });
 test('solo: more than half is a victory, but the match only ends at 100% or when caught', () => {
   const arena = clean();

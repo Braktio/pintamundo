@@ -1,7 +1,9 @@
 rules_version = '2';
 // users/{uid}: each player's saved profile, private to its owner (written by cloud.js).
-// ranking/{uid}: the public global ranking; anyone can read it, each player writes only
-// their own row. Paste these rules in Firebase console → Firestore Database → Rules.
+// ranking-YYYY-MM/{uid}: the world ranking of each monthly season. Anyone can read it; only
+// the game server writes it (with the admin key, which skips these rules), so nobody can
+// raise their own trophies. ranking/{uid}: the ranking from before seasons, read-only now.
+// Players can delete their own rows. Paste these rules in Firebase console → Firestore → Rules.
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{uid} {
@@ -14,12 +16,10 @@ service cloud.firestore {
     match /ranking/{uid} {
       allow read: if true;
       allow delete: if request.auth != null && request.auth.uid == uid;
-      allow create, update: if request.auth != null && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['name', 'points', 'skin', 'updatedAt'])
-        && request.resource.data.name is string && request.resource.data.name.size() <= 14
-        && request.resource.data.skin is string && request.resource.data.skin.size() <= 20
-        && request.resource.data.points is number
-        && request.resource.data.points >= 0 && request.resource.data.points <= 1000000;
+    }
+    match /{season}/{uid} {
+      allow read: if season.matches('ranking-[0-9]{4}-[0-9]{2}');
+      allow delete: if season.matches('ranking-[0-9]{4}-[0-9]{2}') && request.auth != null && request.auth.uid == uid;
     }
   }
 }

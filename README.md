@@ -99,6 +99,61 @@ Cada punto porcentual conquistado entrega 18 Bits y 30 XP; cada baja, 120 Bits y
 
 Gato Rayo se regala en el nivel 2, Platillo Zum en el 5 y Dragoncito en el 10 (también pueden salir en cofres). El botón 🐢 del menú activa el **modo fácil**: los robots van más despacio, cazan desde más cerca y tu camino se dibuja más grueso. Los perfiles anteriores se migran solos: el antiguo contador de cofres pasa a cofres raros.
 
+## Rangos, temporadas y ranking mundial
+
+Las **copas 🏆 solo se ganan en partidas en línea con la cuenta de Google conectada**, y las calcula el servidor, así que nadie puede subirse las suyas:
+
+1. Al entrar en una sala, el teléfono envía su token de Firebase (`cloud.idToken`) y el servidor lo verifica (`ranked.mjs`). Un token falso deja la partida sin ranking.
+2. Al terminar, la sala calcula para cada jugador verificado las estrellas (`matchStars`, igual que en el teléfono), sus capturas, si pintó todo el mapa y su puesto (`Room.results` en `multiplayer.mjs`).
+3. El servidor suma las copas (`rankChange`) en una transacción de Firestore y envía al teléfono un mensaje `trophies` con el cambio y el total.
+
+Para eso necesita la clave de cuenta de servicio de Firebase en la variable de entorno `FIREBASE_SERVICE_ACCOUNT` de Render (declarada en `render.yaml` con `sync: false`). Sin ella, el juego en línea funciona igual pero sin ranking. Las partidas en solitario dan estrellas, cofres y XP, pero no copas.
+
+Cuántas copas da cada partida: −6 sin estrellas; +4, +10 o +18 con 1, 2 o 3 estrellas; +2 por cada rival atrapado (hasta 5); +20 por pintar todo el mapa; +8 al primero, +3 del 2.º al 3.º y −3 al último. Nunca bajan de cero.
+
+**Temporadas:** una por mes natural (UTC), con su propia colección `ranking-AAAA-MM/{uid}` (nombre, copas y personaje). Cada temporada empieza con la mitad de las copas de la anterior (`seasonStart`). La primera, `2026-10`, parte del ranking de antes (`ranking/{uid}`, ahora de solo lectura). Al abrir el juego tras el fin de una temporada, se reciben una vez cofres según el rango alcanzado (`SEASON_REWARDS`: de 1 cofre común en Bronce a 2 legendarios y 1 épico en Leyenda).
+
+**10 rangos con 3 niveles** (30 en total): Bronce, Plata, Oro, Platino, Esmeralda, Rubí, Diamante, Maestro, Gran Maestro y Leyenda, del 1 al 3. Cada nivel empieza en `40·n + 4·n²` copas (Bronce 2 en 44, Plata 1 en 156, Leyenda 3 en 4.524). Los emblemas son escudos SVG con corona a partir de Maestro.
+
+La pestaña **Rangos** tiene tres vistas:
+- **Mundial:** los 50 mejores de la temporada.
+- **Amigos:** las personas con las que jugaste salas de amigos con cuenta. El servidor las incluye en el mensaje `trophies` y se guardan en el perfil, hasta 50.
+- **Rangos:** la escalera completa.
+
+Las reglas de `firestore.rules` permiten leer el ranking a cualquiera, pero no escribirlo: solo el servidor escribe, con la clave de administrador. Cada jugador puede borrar sus propias filas.
+
+## Niveles de personaje
+
+Los personajes **raros, épicos, legendarios y míticos** suben de nivel, del 1 al 10, con los repetidos que salen en los cofres (`characterLevel` y `copiesFor` en `engine.js`). Para pasar del nivel *n* al *n*+1 hacen falta ⌈*n*/2⌉ repetidos: 25 en total hasta el nivel 10. Cada nivel aumenta un **6 % el alcance** de sus poderes (+54 % en el nivel 10):
+
+- Distancia: alcance del Disparo y de su pintura, radio de la Bomba, de Congelar, del Imán y del pincel del Rodillo.
+- Duración, en los poderes sin distancia: Turbo, Burbuja y Fantasma.
+
+Mientras queden premios nuevos en la rareza sorteada, 1 de cada 4 cofres da un repetido de un personaje tuyo que aún pueda subir. Los comunes no suben de nivel; sus repetidos, igual que los de un personaje en el nivel 10 o los de un color, se devuelven en estrellas. Los robots juegan siempre a nivel 1. En línea, el teléfono envía el nivel y el servidor solo acepta valores del 1 al 10. La colección muestra el nivel, los repetidos que faltan y el alcance extra.
+
+La foto de perfil (arriba a la izquierda y en el ranking mundial) es el personaje elegido en ese momento.
+
+## Cofres
+
+| Cofre | Precio | Común | Raro | Épico | Legendario | Mítico |
+| --- | --- | --- | --- | --- | --- | --- |
+| Común | 300 ⭐ | 70% | 25% | 5% | — | — |
+| Raro | 900 ⭐ | 35% | 45% | 15% | 5% | — |
+| Épico | 2.500 ⭐ | — | 35% | 45% | 15% | 5% |
+| Legendario | 6.000 ⭐ | — | — | 40% | 45% | 15% |
+
+Se ganan cofres al terminar una partida (1 estrella → común, 2 → raro, victoria → épico), al subir de nivel (raro; legendario cada 5 niveles) y gratis cada 4 horas (común). Un perfil nuevo empieza con un cofre raro. Los cofres ganados en una partida (por subir de nivel o por el resultado) se guardan al momento, pero no se anuncian mientras juegas: al terminar aparecen en los resultados y se abren solos, uno tras otro. Dentro de la rareza sorteada se prioriza lo que aún no tienes; un repetido se devuelve en estrellas (40 a 640 según rareza). Los colores especiales también salen en cofres. Las probabilidades se muestran en la pantalla de cofres. No hay compras con dinero real.
+
+## HUD y progreso
+
+El HUD de cristal oscuro reproduce la composición de referencia: silueta de moto y nombre **CYBER_HAWK_01** arriba a la izquierda, barra cian al 80% y barra de energía con degradado cian/amarillo. La primera es un indicador visual de escudo, no un sistema de vida por impactos: las reglas siguen siendo de eliminación por corte. Se ilumina al 100% con escudo y cae a 0 al morir. La energía refleja el uso y la recarga de Dash Boost.
+
+La clasificación muestra los tres líderes con nombres de piloto y puntuación entre paréntesis, calculada como `celdas × 20 + bajas × 1000`. El minimapa refleja territorios y estelas. Los controles respetan áreas seguras y tienen superficies táctiles de al menos 44 px.
+
+Cada punto porcentual conquistado entrega 18 Bits y 30 XP; cada baja, 120 Bits y 100 XP. Se guarda el progreso al obtenerlo y cada 10 segundos. La partida en curso no se restaura al recargar. El nivel sigue `1 + floor((XP / 200)^(1 / 1.45))`.
+
+Gato Rayo se regala en el nivel 2, Platillo Zum en el 5 y Dragoncito en el 10 (también pueden salir en cofres). El botón 🐢 del menú activa el **modo fácil**: los robots van más despacio, cazan desde más cerca y tu camino se dibuja más grueso. Los perfiles anteriores se migran solos: el antiguo contador de cofres pasa a cofres raros.
+
 ## Rangos y ranking mundial
 
 Cada partida da o quita **copas 🏆** (`rankChange` en `engine.js`): −6 sin estrellas; +4, +10 o +18 con 1, 2 o 3 estrellas; +2 por cada rival atrapado (hasta 5); +20 por pintar todo el mapa. En línea, además, +8 al primero, +3 del 2.º al 3.º y −3 al último. Las copas nunca bajan de cero. Una sola vez por perfil (lo marca `ranked`), las copas suben hasta lo que vale su historial (`startingPoints`: 12 por victoria, 2 por rival atrapado y el porcentaje de su mejor zona, como mucho 1.000). Así, los perfiles de antes de los rangos no empiezan en cero, y como se toma el valor mayor, nada cuenta dos veces.

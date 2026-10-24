@@ -10,6 +10,7 @@
     "android:sync": "node scripts/build-web.mjs && npx cap sync android"
   },
   "dependencies": {
+    "firebase-admin": "^13.10.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {

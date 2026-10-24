@@ -13,3 +13,6 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
+      # Firebase service-account key (JSON) for ranked online play; set in the Render dashboard.
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
