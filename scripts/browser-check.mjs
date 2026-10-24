@@ -62,8 +62,13 @@ try {
   assert.equal(await evaluate('Boolean(document.querySelector("#rank-tab-icon svg"))'), true, 'the Rangos tab shows the rank emblem');
   for (const tab of ['collection', 'crates', 'progress', 'ranks']) {
     await evaluate(`document.querySelector('.tab[data-tab="${tab}"]').click()`); await sleep(350);
-    await screenshot(`preview-${tab}.png`);
+    await screenshot(tab === 'ranks' ? 'preview-rank-suggest.png' : `preview-${tab}.png`);
   }
+  // Opening Rangos without an account suggests connecting it, once.
+  assert.equal(await evaluate('Boolean(document.getElementById("rank-suggest-login"))'), true, 'players without an account are invited to connect it');
+  await evaluate('document.getElementById("rank-suggest-later").click()');
+  assert.match(await evaluate('document.getElementById("rank-list").textContent'), /Conéctala para rankear/);
+  await screenshot('preview-ranks.png');
   // Rare and better characters show their level, repeats and extra reach.
   await evaluate(`document.querySelector('.tab[data-tab="collection"]').click()`); await sleep(300);
   assert.equal(await evaluate('Boolean(document.querySelector("[data-skin=tron]").closest("article").querySelector(".char-level"))'), true, 'an owned rare character shows its level');

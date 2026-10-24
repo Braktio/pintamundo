@@ -400,7 +400,7 @@ function showScreen(name) {
   $('play').setAttribute('aria-label', name === 'home' ? '¡A jugar!' : 'Volver al inicio');
   document.querySelector('.screens').scrollTop = 0;
   renderMenu();
-  if (name === 'ranks') void loadLeaderboard();
+  if (name === 'ranks') { void loadLeaderboard(); suggestRankLogin(); }
 }
 document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () => showScreen(button.dataset.tab));
 $('hangar-items').onclick = event => {
@@ -779,7 +779,19 @@ function rankResult(before, after, change) {
   return `<div class="rank-result">${rankBadge(after.tier, 44)}<span>${change >= 0 ? '+' : ''}${change} 🏆 · <b>${after.name}</b>${moved}</span></div>`;
 }
 // Signed-in players keep their row of the global ranking up to date.
-function publishRank() { if (account) cloud.publishRank(account.uid, profile).catch(() => { /* Retried after the next match. */ }); }
+function publishRank() { return account ? cloud.publishRank(account.uid, profile).catch(() => { /* Retried after the next match. */ }) : Promise.resolve(); }
+// Where a player without an account would stand in the loaded ranking (0 if unknown).
+const wouldPlace = () => leaderboard.status === 'ok' ? leaderboard.rows.filter(row => (Number(row.points) || 0) > profile.points).length + 1 : 0;
+// Players who open Rangos without an account are invited, once per visit to the game, to
+// connect it so their trophies count in the world ranking.
+let rankSuggested = false;
+function suggestRankLogin() {
+  if (account || !cloud.available || rankSuggested || state !== 'menu') return;
+  rankSuggested = true;
+  dialog(`<p class="eyebrow">🌍 Ranking mundial</p>${rankBadge(rankFor(profile.points).tier, 90)}<h2>¡Compite con todo el mundo!</h2><p>Tienes <b>${number(profile.points)} 🏆</b>, pero sin cuenta no cuentan en el ranking. Conecta tu cuenta de Google para rankear contra otros jugadores; además, tu progreso quedará guardado en la nube.</p><div class="dialog-buttons login-buttons"><button id="rank-suggest-login" class="dialog-button login google">Conectar con Google</button><button id="rank-suggest-later" class="dialog-button secondary">Ahora no</button></div>`);
+  $('rank-suggest-login').onclick = signIn;
+  $('rank-suggest-later').onclick = () => $('dialog').close();
+}
 let rankTab = 'global', leaderboard = { status: 'idle', rows: [], at: 0 };
 async function loadLeaderboard(force = false) {
   if (!cloud.available || leaderboard.status === 'loading' || (!force && leaderboard.status === 'ok' && Date.now() - leaderboard.at < 60000)) return;
@@ -796,7 +808,7 @@ function renderRanks() {
   $('rank-name').textContent = current.name;
   $('rank-points').textContent = current.next === null ? `${number(profile.points)} 🏆 · ¡Rango máximo!` : `${number(profile.points - current.start)} / ${number(current.next - current.start)} 🏆`;
   $('rank-fill').style.width = (current.next === null ? 100 : (profile.points - current.start) / (current.next - current.start) * 100) + '%';
-  $('rank-next').textContent = current.next === null ? 'Eres una leyenda de Pintamundo.' : `Tienes ${number(profile.points)} 🏆. Siguiente: ${rankFor(current.next).name}`;
+  $('rank-next').textContent = (current.next === null ? 'Eres una leyenda de Pintamundo.' : `Tienes ${number(profile.points)} 🏆. Siguiente: ${rankFor(current.next).name}`) + (account || !cloud.available ? '' : ' · Conecta tu cuenta para rankear');
   document.querySelectorAll('[data-ranks]').forEach(b => b.classList.toggle('selected', b.dataset.ranks === rankTab));
   if (rankTab === 'ladder') {
     $('rank-list').innerHTML = RANKS.map((rank, index) => `<div class="ladder-row">${[0, 1, 2].map(d => {
@@ -806,7 +818,8 @@ function renderRanks() {
     return;
   }
   if (!cloud.available) { $('rank-list').innerHTML = '<p class="rank-note">El ranking mundial está en la app y en el juego en internet.</p>'; return; }
-  const join = account ? '' : '<div class="rank-join"><p>Entra con Google para aparecer en el ranking mundial.</p><button id="rank-login" class="dialog-button">☁️ Entrar con Google</button></div>';
+  const place = wouldPlace();
+  const join = account ? '' : `<div class="rank-join"><p>🔒 Tus ${number(profile.points)} 🏆 aún no cuentan${place ? `: con tu cuenta estarías en el <b>puesto ${place}</b>` : ''}. ¡Conéctala para rankear!</p><button id="rank-login" class="dialog-button login google">Conectar con Google</button></div>`;
   const body = leaderboard.status === 'loading' || leaderboard.status === 'idle' ? '<p class="rank-note">Cargando el ranking… ⏳</p>'
     : leaderboard.status === 'error' ? '<p class="rank-note">No pudimos cargar el ranking. Revisa tu conexión.</p><div class="dialog-buttons"><button id="rank-retry" class="dialog-button secondary">🔄 Reintentar</button></div>'
     : !leaderboard.rows.length ? '<p class="rank-note">Todavía no hay nadie. ¡Sé el primero!</p>'
@@ -817,7 +830,7 @@ function renderRanks() {
         return `<li class="${me ? 'me' : ''}"><span class="place">${i + 1}</span><img class="rank-avatar" src="${renderer.portraitURL({ skin, color: '#2fa8ff' }, 40)}" alt="">${rankBadge(rankFor(points).tier, 38)}<b>${cleanName(row.name) || 'Jugador'}${me ? ' (tú)' : ''}</b><span class="points">${number(points)} 🏆</span></li>`;
       }).join('')}</ol>`;
   $('rank-list').innerHTML = join + body;
-  if ($('rank-login')) $('rank-login').onclick = openAccount;
+  if ($('rank-login')) $('rank-login').onclick = signIn;
   if ($('rank-retry')) $('rank-retry').onclick = () => loadLeaderboard(true);
 }
 document.querySelectorAll('[data-ranks]').forEach(button => button.onclick = () => { rankTab = button.dataset.ranks; renderRanks(); });
@@ -863,7 +876,9 @@ async function signIn() {
   $('dialog').close(); renderAccount();
   await syncWithCloud(true);
   if (!account) return;
-  publishRank(); leaderboard.at = 0;
+  // Right away in the world ranking, with the list refreshed if it is on screen.
+  await publishRank(); leaderboard.at = 0;
+  if (screen === 'ranks') void loadLeaderboard(true);
   toast('☁️ Conectado con Google.');
   if (!profile.name && state === 'menu' && !$('dialog').open) editName(true, cleanName(account.name.split(' ')[0]));
 }
