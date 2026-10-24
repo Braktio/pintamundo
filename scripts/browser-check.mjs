@@ -45,7 +45,7 @@ try {
   await page('Runtime.enable'); await page('Page.enable');
   await page('Page.addScriptToEvaluateOnNewDocument', { source: 'let randomSeed=482;Math.random=()=>{randomSeed=(Math.imul(randomSeed,1664525)+1013904223)>>>0;return randomSeed/4294967296;};' });
   // Start as Gato Rayo (rare, Turbo) so the power button can be exercised.
-  await page('Page.addScriptToEvaluateOnNewDocument', { source: "if(!localStorage.getItem('neon-frontier.profile.v1'))localStorage.setItem('neon-frontier.profile.v1',JSON.stringify({version:1,name:'Prueba',bits:0,xp:540,wins:0,totalKills:0,best:0,nemesis:'',skin:'tron',trail:'cyan',skins:[],trails:['cyan'],easy:false,chests:{comun:0,raro:1,epico:0,legendario:0},freeChestAt:0}));" });
+  await page('Page.addScriptToEvaluateOnNewDocument', { source: "if(!localStorage.getItem('neon-frontier.profile.v1'))localStorage.setItem('neon-frontier.profile.v1',JSON.stringify({version:1,epoch:2,name:'Prueba',bits:0,xp:980,wins:0,totalKills:0,best:0,nemesis:'',skin:'tron',trail:'cyan',skins:[],trails:['cyan'],easy:false,chests:{comun:0,raro:1,epico:0,legendario:0},freeChestAt:0}));" });
   await page('Page.navigate', { url: base });
   for (let i = 0; i < 30; i++) { if (await evaluate('document.querySelectorAll(".hangar-card").length') > 30) break; await sleep(150); }
   assert.deepEqual(errors, []);
@@ -109,8 +109,8 @@ try {
   const result = await evaluate('({percent:document.getElementById("hud-territory").textContent,bits:document.getElementById("hud-bits").textContent,dialog:document.getElementById("dialog-content").textContent,profile:JSON.parse(localStorage.getItem("neon-frontier.profile.v1"))})');
   assert.ok(result.profile.bits > 0, 'closing the route awards persistent Bits: ' + JSON.stringify(result));
   assert.ok(result.profile.xp > 0);
-  // The loop crosses level 3 (546 XP): its chest is not announced during the match...
-  assert.equal(result.profile.chests.raro, 2, 'the level-up chest is saved right away');
+  // The loop crosses level 4 (984 XP), which gives a common chest: it is not announced during the match...
+  assert.equal(result.profile.chests.comun, 1, 'the level-up chest is saved right away: ' + JSON.stringify({ xp: result.profile.xp, chests: result.profile.chests, bar: result.profile.chestBar }));
   assert.doesNotMatch(await evaluate('document.getElementById("toasts").textContent'), /[Cc]ofre/, 'no chest messages during the match');
   // ...and opens by itself after the results, followed by the match buttons.
   await key('Escape', 'Escape'); await key('Escape', 'Escape', 'keyUp');
@@ -119,7 +119,7 @@ try {
   assert.equal(await until('Boolean(document.querySelector(".rarity-banner"))', 8000), true, 'the chest opened by itself');
   await screenshot('preview-match-chest.png');
   assert.equal(await evaluate('Boolean(document.getElementById("retry"))'), true, 'the last chest shows the match buttons');
-  assert.equal(await evaluate('JSON.parse(localStorage.getItem("neon-frontier.profile.v1")).chests.raro'), 1, 'the opened chest is spent');
+  assert.equal(await evaluate('Object.values(JSON.parse(localStorage.getItem("neon-frontier.profile.v1")).chests).reduce((a, b) => a + b, 0)'), 1, 'every chest won is opened and spent (the starting rare one stays)');
   // Load a profile fixture to verify crate spending, reward reveal and persistence.
   const fixture = await evaluate('(async()=>{const m=await import("./engine.js");const p=m.freshProfile();p.bits=1200;p.xp=1000;p.skin="tron";return p;})()');
   await page('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('neon-frontier.profile.v1', ${JSON.stringify(JSON.stringify(fixture))});` });
@@ -133,7 +133,7 @@ try {
   await evaluate('document.querySelector("[data-buy=comun]").click()'); await sleep(1700);
   assert.equal(await evaluate('Boolean(document.getElementById("close-crate"))'), true);
   const afterChest = await evaluate('JSON.parse(localStorage.getItem("neon-frontier.profile.v1"))');
-  assert.ok(afterChest.bits >= 900 && afterChest.bits <= 900 + 640, 'a common chest costs 300 stars: ' + afterChest.bits);
+  assert.ok(afterChest.bits >= 200 && afterChest.bits <= 200 + 320, 'a common chest costs 1.000 stars: ' + afterChest.bits);
   assert.equal(await evaluate('Boolean(document.querySelector(".rarity-banner"))'), true, 'the reveal shows the rarity');
   await screenshot('preview-chest.png');
   assert.deepEqual(errors, [], 'no uncaught browser exceptions');

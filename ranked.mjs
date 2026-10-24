@@ -2,7 +2,7 @@
 // every online match to Firestore, so nobody can raise their own. Only the server can write
 // the ranking (see firestore.rules). Each season has its own collection, ranking-YYYY-MM.
 // It runs only when FIREBASE_SERVICE_ACCOUNT holds a Firebase service-account key (JSON).
-import { rankChange, seasonOf, previousSeason, seasonStart } from './engine.js';
+import { rankChange, seasonOf, previousSeason, seasonStart, PROGRESS_EPOCH } from './engine.js';
 
 export async function createRanked(serviceAccount) {
   const [{ initializeApp, cert }, { getFirestore }, { getAuth }] = await Promise.all([
@@ -11,19 +11,17 @@ export async function createRanked(serviceAccount) {
   const app = initializeApp({ credential: cert(JSON.parse(serviceAccount)) });
   const db = getFirestore(app), auth = getAuth(app);
   const row = (season, uid) => db.collection('ranking-' + season).doc(uid);
-  // Adds one match to a player's season row, starting the season from last season's
-  // trophies (or the pre-season ranking) the first time. Returns the new total.
+  // Adds one match to a player's season row, starting the season from half of last
+  // season's trophies the first time. Returns the new total.
   async function apply(result, season) {
     return db.runTransaction(async tx => {
       const current = await tx.get(row(season, result.uid));
-      let points;
-      if (current.exists) points = current.data().points;
-      else {
-        const [previous, legacy] = await Promise.all([tx.get(row(previousSeason(season), result.uid)), tx.get(db.collection('ranking').doc(result.uid))]);
-        points = seasonStart(season, previous.exists ? previous.data().points : undefined, legacy.exists ? legacy.data().points : undefined);
-      }
+      // Rows from before the last progress reset (another epoch) count as empty.
+      const fresh = doc => doc.exists && doc.data().epoch === PROGRESS_EPOCH ? doc.data() : null;
+      let points = fresh(current)?.points;
+      if (points === undefined) points = seasonStart(season, fresh(await tx.get(row(previousSeason(season), result.uid)))?.points);
       const next = Math.max(0, points + rankChange(result));
-      tx.set(row(season, result.uid), { name: result.name, skin: result.skin, points: next, updatedAt: Date.now() });
+      tx.set(row(season, result.uid), { name: result.name, skin: result.skin, points: next, epoch: PROGRESS_EPOCH, updatedAt: Date.now() });
       return { change: next - points, points: next };
     });
   }

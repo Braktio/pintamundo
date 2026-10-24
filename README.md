@@ -82,12 +82,21 @@ La foto de perfil (arriba a la izquierda y en el ranking mundial) es el personaj
 
 | Cofre | Precio | Común | Raro | Épico | Legendario | Mítico |
 | --- | --- | --- | --- | --- | --- | --- |
-| Común | 300 ⭐ | 70% | 25% | 5% | — | — |
-| Raro | 900 ⭐ | 35% | 45% | 15% | 5% | — |
-| Épico | 2.500 ⭐ | — | 35% | 45% | 15% | 5% |
-| Legendario | 6.000 ⭐ | — | — | 40% | 45% | 15% |
+| Común | 1.000 ⭐ | 70% | 25% | 5% | — | — |
+| Raro | 3.000 ⭐ | 35% | 45% | 15% | 5% | — |
+| Épico | 8.000 ⭐ | — | 35% | 45% | 15% | 5% |
+| Legendario | 20.000 ⭐ | — | — | 40% | 45% | 15% |
 
-Se ganan cofres al terminar una partida (1 estrella → común, 2 → raro, victoria → épico), al subir de nivel (raro; legendario cada 5 niveles) y gratis cada 4 horas (común). Un perfil nuevo empieza con un cofre raro. Los cofres ganados en una partida (por subir de nivel o por el resultado) se guardan al momento, pero no se anuncian mientras juegas: al terminar aparecen en los resultados y se abren solos, uno tras otro. Dentro de la rareza sorteada se prioriza lo que aún no tienes; un repetido se devuelve en estrellas (40 a 640 según rareza). Los colores especiales también salen en cofres. Las probabilidades se muestran en la pantalla de cofres. No hay compras con dinero real.
+Los cofres cuestan esfuerzo (`fillChestBar`, `levelChest` y `CHESTS` en `engine.js`):
+- **Barra de cofre:** las estrellas de cada partida (0 a 3) la llenan. Cada **12 estrellas** dan un cofre: 75 % común, 22 % raro y 3 % épico. Son unas 5 partidas buenas por cofre.
+- **Niveles:** un cofre común cada 2 niveles, raro cada 5 y épico cada 10.
+- **Otras fuentes:** el cofre común gratis cada **8 horas**, un cofre común por completar las 3 misiones diarias, la racha (comunes los días 3 y 6, raro el 7) y los premios de temporada.
+- **Estrellas:** las partidas dan 6 por cada punto porcentual pintado y 40 por rival atrapado, y cada estrella del mapa da 2.
+- **Repetidos:** si el personaje no puede subir de nivel, se devuelve en estrellas (de 20 a 320 según la rareza).
+
+Un perfil nuevo empieza con un cofre raro. Dentro de la rareza sorteada se priorizan los premios nuevos. Las probabilidades se muestran en la pantalla de cofres. No hay compras con dinero real.
+
+**Reinicio del progreso (época):** `PROGRESS_EPOCH` (ahora 2). Un perfil guardado con otra época, en el teléfono o en la nube, empieza de cero conservando el nombre y el modo fácil, y el juego lo explica una vez. El servidor rechaza las partidas en línea de teléfonos con otra época («Actualiza Pintamundo…»). Las filas del ranking llevan la época, y el servidor y la app ignoran las de épocas anteriores. Para volver a reiniciar a todos basta con subir el número.
 
 ## HUD y progreso
 

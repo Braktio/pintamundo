@@ -38,7 +38,7 @@ try {
     const page = (method, params) => send(method, params, sessionId);
     await page('Runtime.enable'); await page('Page.enable');
     await page('Emulation.setDeviceMetricsOverride', { width: 844, height: 390, deviceScaleFactor: 1, mobile: true });
-    await page('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('neon-frontier.profile.v1', JSON.stringify({version:1,bits:0,xp:5000,wins:0,totalKills:0,best:0,nemesis:'',skin:'${skin}',trail:'cyan',skins:['${skin}'],trails:['cyan'],easy:false,chests:{comun:0,raro:0,epico:0,legendario:0},freeChestAt:0}));` });
+    await page('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('neon-frontier.profile.v1', JSON.stringify({version:1,epoch:2,bits:0,xp:5000,wins:0,totalKills:0,best:0,nemesis:'',skin:'${skin}',trail:'cyan',skins:['${skin}'],trails:['cyan'],easy:false,chests:{comun:0,raro:0,epico:0,legendario:0},freeChestAt:0}));` });
     await page('Page.navigate', { url: base });
     await sleep(700);
     const evaluate = async expression => {

@@ -2,16 +2,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { Hub, encodeGrid } from '../multiplayer.mjs';
-import { SIZE } from '../engine.js';
+import { SIZE, PROGRESS_EPOCH } from '../engine.js';
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 // A fake phone: records every message the hub sends to it.
 function phone(hub) {
   const inbox = [], session = hub.connect({ send: text => inbox.push(JSON.parse(text)) });
-  const send = data => session.message(JSON.stringify(data));
+  // Phones of the current epoch (v) unless a test says otherwise.
+  const send = data => session.message(JSON.stringify(['quick', 'create', 'join'].includes(data.t) && !('v' in data) ? { ...data, v: PROGRESS_EPOCH } : data));
   const last = type => inbox.filter(m => m.t === type).at(-1);
   return { inbox, send, last, close: session.close };
 }
+
+test('phones from before the last progress reset are asked to update', () => {
+  const hub = new Hub();
+  try {
+    const old = phone(hub);
+    old.send({ t: 'quick', v: 1 });
+    assert.match(old.last('error').message, /Actualiza/);
+    assert.equal(hub.rooms.size, 0);
+  } finally { hub.close(); }
+});
 
 test('grid run-length encoding covers every cell', () => {
   const grid = new Int16Array(SIZE).fill(-1); grid.fill(2, 10, 30);
@@ -111,10 +122,10 @@ test('real WebSocket clients can create, join and play a room on the server', as
       socket.onerror = reject;
     });
     const host = await open(), friend = await open();
-    host.send({ t: 'create', skin: 'rift', color: '#2fa8ff' });
+    host.send({ t: 'create', v: PROGRESS_EPOCH, skin: 'rift', color: '#2fa8ff' });
     await sleep(150);
     const code = host.inbox.find(m => m.t === 'lobby').code;
-    friend.send({ t: 'join', code, skin: 'yeti', color: '#ff8ad8' });
+    friend.send({ t: 'join', v: PROGRESS_EPOCH, code, skin: 'yeti', color: '#ff8ad8' });
     await sleep(150);
     host.send({ t: 'start' });
     await sleep(400);

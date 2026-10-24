@@ -22,7 +22,7 @@ function outputUntil(stream, expression) {
 // A player some days in: level 9, several rare-or-better characters, chests to open, a streak.
 const yesterday = new Date(Date.now() - 86400000), day = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const sample = {
-  version: 1, name: 'Luna', updatedAt: 1, points: 812, ranked: true, bits: 3450, xp: 5200, wins: 12, totalKills: 48, best: 64, nemesis: '',
+  version: 1, epoch: 2, name: 'Luna', updatedAt: 1, points: 812, ranked: true, bits: 3450, xp: 5200, wins: 12, totalKills: 48, best: 64, nemesis: '',
   skin: 'unicornio', trail: 'gold', skins: ['tron', 'abeja', 'koala', 'spectre', 'tiburon', 'pintor', 'panda', 'unicornio', 'fenix'], trails: ['cyan', 'pink', 'gold'],
   copies: { unicornio: 4, tron: 6 }, easy: false, chests: { comun: 1, raro: 2, epico: 1, legendario: 1 }, freeChestAt: 0,
   daily: { day: '', progress: {}, claimed: [], bonus: false }, streak: { last: day(yesterday), count: 4 }, friends: [], seasonClaimed: ''

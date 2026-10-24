@@ -1,4 +1,4 @@
-import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, tierStart, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonReward, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
+import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, tierStart, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonReward, CHARACTER_MAX_LEVEL, CHEST_BAR, PROGRESS_EPOCH, fillChestBar, levelChest, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
 import { Renderer, shade } from './renderer.js';
 import { Connection, Mirror, defaultServer, rememberServer, normalizeServer } from './online.js';
 import * as cloud from './cloud.js';
@@ -358,6 +358,7 @@ function renderChests() {
   const types = Object.keys(CHESTS);
   $('chest-inventory').innerHTML = types.map(type => `<article class="card chest-slot chest-${type}"><span class="card-badge">x${profile.chests[type]}</span><div class="card-art ${profile.chests[type] ? 'ready' : ''}">${chestSVG(type)}</div><button class="card-foot" data-open="${type}" ${profile.chests[type] ? '' : 'disabled'}>${profile.chests[type] ? '¡ABRIR!' : CHESTS[type].name}</button></article>`).join('');
   $('chest-shop').innerHTML = types.map(type => `<article class="card chest-slot chest-${type}"><div class="card-art">${chestSVG(type)}</div><button class="card-foot" data-buy="${type}" ${profile.bits >= CHESTS[type].price ? '' : 'disabled'}>${number(CHESTS[type].price)} ⭐</button></article>`).join('');
+  $('crates-bar').innerHTML = `<p class="card-copy">🎁 Barra de cofre: las estrellas de cada partida la llenan. Cada ${CHEST_BAR} ⭐, ¡un cofre!</p><div class="chest-bar"><div class="chest-bar-track"><i style="width:${profile.chestBar / CHEST_BAR * 100}%"></i><b>${profile.chestBar} / ${CHEST_BAR} ⭐</b></div></div>`;
   $('chest-odds').innerHTML = types.map(type => `<div class="odds-row"><span class="odds-chest">${chestSVG(type, 40)}<b>${CHESTS[type].name}</b></span><span class="odds-values">${Object.entries(CHESTS[type].odds).map(([rarity, odds]) => `<span class="rarity-chip rarity-${rarity}">${RARITIES[rarity].name} ${odds}%</span>`).join('')}</span></div>`).join('');
   renderFreeChest();
   const freeArt = document.querySelector('.free-chest-art'); if (freeArt && !freeArt.querySelector('svg')) freeArt.innerHTML = chestSVG('comun', 68);
@@ -556,11 +557,10 @@ function end(won, reason, ranking = null) {
   won = won || (!mirror && arena.won);
   const player = arena.actors[0], percent = arena.best / SIZE * 100, perfect = arena.best >= SIZE;
   profile.best = Math.max(profile.best, percent);
-  // Match reward: 1 star → common chest, 2 stars → rare chest, a win → epic chest.
+  // The stars of the match fill the chest bar; every ${CHEST_BAR} stars give a chest.
   const stars = matchStars({ won, percent, kills: player.kills });
-  const prizeChest = [null, 'comun', 'raro', 'epico'][stars];
   if (won) profile.wins++;
-  if (prizeChest) { profile.chests[prizeChest]++; matchChests.push({ type: prizeChest, reason: won ? '¡Victoria!' : '⭐'.repeat(stars) }); }
+  for (const type of fillChestBar(profile, stars)) matchChests.push({ type, reason: '⭐ ¡Barra llena!' });
   // Trophies only come from online matches: the server works them out and sends them.
   const ranked = !!mirror && !!account;
   const completed = recordMatch(profile, today(), { kills: player.kills, percent, orbs: matchStats.orbs, powers: matchStats.powers, online: !!mirror, won });
@@ -573,7 +573,8 @@ function end(won, reason, ranking = null) {
     state = 'results';
     const earned = matchChests.splice(0);
     const title = perfect ? '¡MAPA COMPLETO! 🌍' : won ? '¡GANASTE! 🏆' : stars >= 2 ? '¡Muy bien!' : stars ? '¡Buen intento!' : '¡Casi lo tienes!';
-    const chests = earned.length ? `<div class="earned-chests">${earned.map(c => `<div class="prize-chest chest-${c.type}">${chestSVG(c.type, 56)}<b>${CHESTS[c.type].name}</b><small>${c.reason}</small></div>`).join('')}</div>` : '<p>Pinta un poco más para ganar un cofre 🎁</p>';
+    const bar = `<div class="chest-bar"><span>🎁</span><div class="chest-bar-track"><i style="width:${profile.chestBar / CHEST_BAR * 100}%"></i><b>${profile.chestBar} / ${CHEST_BAR} ⭐</b></div></div>`;
+    const chests = (earned.length ? `<div class="earned-chests">${earned.map(c => `<div class="prize-chest chest-${c.type}">${chestSVG(c.type, 56)}<b>${CHESTS[c.type].name}</b><small>${c.reason}</small></div>`).join('')}</div>` : '') + bar;
     const bonus = Math.floor(arena.bits), adOffer = bonus > 0 && adReady() ? `<div class="dialog-buttons"><button class="dialog-button ad-button" id="ad-double">📺 Duplica tus estrellas: +${number(bonus)} ⭐</button></div>` : '';
     const actions = `${adOffer}<div class="dialog-buttons"><button class="dialog-button" id="retry">${!online ? '¡OTRA VEZ! ▶' : online.private ? '👫 Volver a la sala' : '¡OTRA PARTIDA! ▶'}</button><button class="dialog-button secondary" id="to-menu">🏠 Menú</button></div>`;
     const wire = () => {
@@ -703,8 +704,8 @@ function processEvents() {
       // Each new level gives a rare chest; every fifth level a legendary one. It is saved now
       // but only shown when the match ends, so nothing covers the arena.
       if (levelFor(profile.xp) > oldLevel) {
-        const level = levelFor(profile.xp), type = level % 5 === 0 ? 'legendario' : 'raro';
-        profile.chests[type]++; matchChests.push({ type, reason: `Nivel ${level}` });
+        const level = levelFor(profile.xp), type = levelChest(level);
+        if (type) { profile.chests[type]++; matchChests.push({ type, reason: `Nivel ${level}` }); }
         announce(`🎉 ¡NIVEL ${level}!`); tone('level');
       }
       save();
@@ -779,7 +780,7 @@ function renderHUD() {
 }
 
 function showHelp() {
-  dialog(`<p class="eyebrow">📖 Cómo se juega</p><h2>¡Pinta el mapa!</h2><ul><li><b>🕹️</b><span>Toca cualquier parte de la pantalla y desliza el dedo hacia donde quieras ir. Tu personaje sigue avanzando solo.</span></li><li><b>🖌️</b><span>Sal de tu zona: dejarás un camino de pintura. Vuelve a casa y se pintará todo lo de dentro.</span></li><li><b>⚠️</b><span>Si un robot toca tu camino mientras estás fuera, ¡te atrapa! Tocar el tuyo o chocar con otros no pasa nada.</span></li><li><b>🎯</b><span>Toca el camino de un robot para atraparlo y quedarte con parte de su zona.</span></li><li><b>⭐</b><span>Recoge estrellas: te dan puntos y hacen más grande tu próxima zona.</span></li><li><b>⚡</b><span>Cerca de la valla vas más rápido.</span></li><li><b>🐥</b><span>Cada personaje es distinto: los comunes no tienen poderes; los raros, épicos, legendarios y míticos traen poderes como disparar, correr más o pintar sin volver a casa. Úsalos con los botones de la derecha y espera a que se recarguen.</span></li><li><b>🎁</b><span>Gana cofres al terminar una partida, al subir de nivel y cada 4 horas gratis. ¡Dentro hay personajes y colores nuevos!</span></li><li><b>🏆</b><span>Pinta más de la mitad del mapa para ganar (y un cofre épico). ¡Luego sigue hasta pintarlo todo! Si atrapas a todos, llegan robots nuevos.</span></li><li><b>🏅</b><span>Cada partida te da o te quita copas 🏆 para subir de rango, de Bronce 1 a Leyenda 3. Mira el ranking mundial en Rangos.</span></li></ul><p>¿Te parece difícil? Activa el modo fácil 🐢 en el menú.</p><div class="dialog-buttons"><button id="close-help" class="dialog-button">¡ENTENDIDO! 👍</button></div>`);
+  dialog(`<p class="eyebrow">📖 Cómo se juega</p><h2>¡Pinta el mapa!</h2><ul><li><b>🕹️</b><span>Toca cualquier parte de la pantalla y desliza el dedo hacia donde quieras ir. Tu personaje sigue avanzando solo.</span></li><li><b>🖌️</b><span>Sal de tu zona: dejarás un camino de pintura. Vuelve a casa y se pintará todo lo de dentro.</span></li><li><b>⚠️</b><span>Si un robot toca tu camino mientras estás fuera, ¡te atrapa! Tocar el tuyo o chocar con otros no pasa nada.</span></li><li><b>🎯</b><span>Toca el camino de un robot para atraparlo y quedarte con parte de su zona.</span></li><li><b>⭐</b><span>Recoge estrellas: te dan puntos y hacen más grande tu próxima zona.</span></li><li><b>⚡</b><span>Cerca de la valla vas más rápido.</span></li><li><b>🐥</b><span>Cada personaje es distinto: los comunes no tienen poderes; los raros, épicos, legendarios y míticos traen poderes como disparar, correr más o pintar sin volver a casa. Úsalos con los botones de la derecha y espera a que se recarguen.</span></li><li><b>🎁</b><span>Las estrellas de cada partida llenan la barra de cofre: cada 12, ¡un cofre! También hay cofres al subir algunos niveles, con las misiones, con la racha y gratis cada 8 horas. ¡Dentro hay personajes y colores nuevos!</span></li><li><b>🏆</b><span>Pinta más de la mitad del mapa para ganar (y un cofre épico). ¡Luego sigue hasta pintarlo todo! Si atrapas a todos, llegan robots nuevos.</span></li><li><b>🏅</b><span>Cada partida te da o te quita copas 🏆 para subir de rango, de Bronce 1 a Leyenda 3. Mira el ranking mundial en Rangos.</span></li></ul><p>¿Te parece difícil? Activa el modo fácil 🐢 en el menú.</p><div class="dialog-buttons"><button id="close-help" class="dialog-button">¡ENTENDIDO! 👍</button></div>`);
   $('close-help').onclick = () => $('dialog').close();
 }
 document.querySelectorAll('[data-help]').forEach(button => button.onclick = showHelp);
@@ -807,9 +808,10 @@ function rankResult(before, after, change) {
 async function refreshTrophies() {
   if (!account) return;
   try {
-    const row = await cloud.seasonRow(season, account.uid);
+    const fresh = r => r && r.epoch === PROGRESS_EPOCH ? r : null;
+    const row = fresh(await cloud.seasonRow(season, account.uid));
     if (row) profile.points = Math.max(0, Math.floor(Number(row.points) || 0));
-    else { const last = await cloud.seasonRow(previousSeason(season), account.uid); if (last) profile.points = Math.floor((Number(last.points) || 0) / 2); }
+    else { const last = fresh(await cloud.seasonRow(previousSeason(season), account.uid)); profile.points = last ? Math.floor((Number(last.points) || 0) / 2) : 0; }
     save(); renderMenu();
   } catch { /* Shown again after the next online match. */ }
 }
@@ -832,6 +834,7 @@ async function claimSeasonReward() {
   if (!account || profile.seasonClaimed === last) return;
   let row;
   try { row = await cloud.seasonRow(last, account.uid); } catch { return; }
+  if (row && row.epoch !== PROGRESS_EPOCH) row = null;
   profile.seasonClaimed = last;
   if (!row) { save(); return; }
   const points = Math.max(0, Math.floor(Number(row.points) || 0)), reward = seasonReward(points), info = rankFor(points);
@@ -859,7 +862,8 @@ const timed = promise => Promise.race([promise, new Promise((_, reject) => setTi
 async function loadLeaderboard(force = false) {
   if (!cloud.available || leaderboard.status === 'loading' || (!force && leaderboard.status === 'ok' && Date.now() - leaderboard.at < 60000)) return;
   leaderboard.status = 'loading'; renderRanks();
-  try { leaderboard = { status: 'ok', rows: await timed(cloud.topPlayers(season, 50)), at: Date.now() }; }
+  // Rows from before the last progress reset are not shown.
+  try { leaderboard = { status: 'ok', rows: (await timed(cloud.topPlayers(season, 50))).filter(r => r.epoch === PROGRESS_EPOCH), at: Date.now() }; }
   catch { leaderboard = { status: 'error', rows: [], at: 0 }; }
   renderRanks();
 }
@@ -868,7 +872,7 @@ async function loadFriends(force = false) {
   if (!account || friendsBoard.status === 'loading' || (!force && friendsBoard.status === 'ok' && Date.now() - friendsBoard.at < 60000)) return;
   friendsBoard.status = 'loading'; renderRanks();
   try {
-    const rows = await timed(cloud.seasonRows(season, [account.uid, ...profile.friends.map(f => f.uid)]));
+    const rows = (await timed(cloud.seasonRows(season, [account.uid, ...profile.friends.map(f => f.uid)]))).filter(r => r.epoch === PROGRESS_EPOCH);
     for (const friend of profile.friends) if (!rows.some(r => r.uid === friend.uid)) rows.push({ uid: friend.uid, name: friend.name, points: 0, skin: 'interceptor' });
     if (!rows.some(r => r.uid === account.uid)) rows.push({ uid: account.uid, name: profile.name, points: profile.points, skin: profile.skin });
     friendsBoard = { status: 'ok', rows: rows.sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0)), at: Date.now() };
@@ -1202,7 +1206,7 @@ async function joinOnline(kind, code = '') {
   const character = characterFor(profile.skin);
   const skin = ownsCharacter(profile, character.id) ? character.id : 'interceptor';
   const token = account ? await cloud.idToken().catch(() => '') : '';
-  online.connection.send({ t: kind, code, token, name: profile.name, level: characterLevel(profile, skin), skin, color: playerColor(), easy: profile.easy === true });
+  online.connection.send({ t: kind, v: PROGRESS_EPOCH, code, token, name: profile.name, level: characterLevel(profile, skin), skin, color: playerColor(), easy: profile.easy === true });
 }
 function disconnect() {
   if (!online) return;
@@ -1283,6 +1287,14 @@ showScreen('home'); requestAnimationFrame(frame);
 if (storageError) toast('No se pudo cargar tu progreso de este teléfono.');
 // The cloud copy is checked first, so a returning player is not asked for a new name;
 // a slow network only delays the question by two seconds.
+// Everyone's progress was reset (a new epoch): explain it once.
+if (profile.resetNotice) {
+  delete profile.resetNotice; save(true);
+  setTimeout(() => {
+    dialog('<p class="eyebrow">🔄 Nueva etapa</p><h2>¡Empezamos de cero!</h2><p>Hemos reiniciado el progreso de todos los jugadores para que el juego sea justo: cofres, estrellas, personajes y copas vuelven a empezar. Conservas tu nombre.</p><p>Ahora los cofres cuestan más de conseguir: las estrellas de cada partida llenan una barra, y cada 12 ganas un cofre.</p><div class="dialog-buttons"><button id="reset-ok" class="dialog-button">¡A JUGAR! ▶</button></div>');
+    $('reset-ok').onclick = () => $('dialog').close();
+  }, 600);
+}
 // A rewarded ad starts loading a little after launch, so the offers can appear.
 setTimeout(preloadAd, 3000);
 Promise.race([restoreAccount(), new Promise(resolve => setTimeout(resolve, 2000))]).finally(() => { if (!profile.name && state === 'menu' && !$('dialog').open) editName(true); else followInvite(); });

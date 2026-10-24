@@ -637,3 +637,11 @@ body.in-match { touch-action:none; overscroll-behavior:none }
 /* Rewarded-ad offers (Android app) */
 .dialog-button.ad-button,.card-foot.ad-button { background:linear-gradient(#fff6a8,var(--yellow) 55%,var(--yellow-deep)); color:var(--ink); -webkit-text-stroke:0 }
 .card-foot.ad-button { border-top:4px solid var(--ink); font-size:18px }
+
+/* Chest bar: match stars towards the next chest */
+.chest-bar { display:flex; align-items:center; justify-content:center; gap:8px; margin:10px auto 0; max-width:340px }
+.chest-bar>span { font-size:28px }
+.chest-bar-track { position:relative; flex:1; height:28px; border:4px solid var(--ink); border-radius:99px; background:#1d2a8c; overflow:hidden }
+.chest-bar-track i { display:block; height:100%; background:linear-gradient(#fff08a,var(--yellow)) }
+.chest-bar-track b { position:absolute; inset:0; display:grid; place-items:center; font:16px var(--display); color:#fff; -webkit-text-stroke:4px var(--ink); paint-order:stroke fill }
+.bar-card { padding:12px 16px 16px; text-align:center }

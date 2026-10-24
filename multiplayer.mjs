@@ -1,6 +1,6 @@
 // Authoritative online rooms. The server runs the same engine as solo games and
 // streams compact deltas; phones only send their heading and power presses.
-import { Arena, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, CHARACTER_MAX_LEVEL, SIZE, freshProfile, cleanName, matchStars } from './engine.js';
+import { Arena, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, CHARACTER_MAX_LEVEL, SIZE, PROGRESS_EPOCH, freshProfile, cleanName, matchStars } from './engine.js';
 
 export const STEP = 1 / 90;
 // 30 updates per second keep online movement smooth on phones.
@@ -186,6 +186,8 @@ export class Hub {
     let data; try { data = JSON.parse(String(raw)); } catch { return; }
     if (!data || typeof data.t !== 'string') return;
     if (data.t === 'quick' || data.t === 'create' || data.t === 'join') {
+      // Phones from before the last progress reset cannot play online until they update.
+      if (data.v !== PROGRESS_EPOCH) { this.send(client, { t: 'error', message: 'Actualiza Pintamundo para jugar en línea. 📲' }); return; }
       client.room?.remove(client);
       // A signed-in phone sends its Firebase ID token; the server checks it to know the
       // player's account. Until it is verified (or without one) the match is unranked.

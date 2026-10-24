@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonStart, seasonReward, FIRST_SEASON } from '../engine.js';
+import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays, PROGRESS_EPOCH, fillChestBar, levelChest, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonStart, seasonReward, FIRST_SEASON, FREE_CHEST_HOURS } from '../engine.js';
 import { Renderer } from '../renderer.js';
 
 function clean(arena = new Arena()) {
@@ -228,6 +228,27 @@ test('chests roll their rarity table, prefer new prizes and refund repeats with 
   const before = profile.bits, repeat = openChest(profile, 'comun', () => 0);
   assert.ok(repeat.duplicate); assert.equal(profile.bits - before, RARITIES.comun.refund);
 });
+test('progress reset: saves from an earlier epoch start over, keeping only the name and easy mode', () => {
+  const abused = { ...freshProfile(), epoch: 1, name: 'Luna', easy: true, bits: 99999, xp: 50000, wins: 80, skins: ['fenix'], chests: { comun: 40, raro: 30, epico: 20, legendario: 10 } };
+  const reset = parseProfile(JSON.stringify(abused));
+  assert.equal(reset.name, 'Luna'); assert.equal(reset.easy, true); assert.equal(reset.resetNotice, true);
+  assert.equal(reset.bits, 0); assert.equal(reset.xp, 0); assert.deepEqual(reset.skins, []); assert.equal(reset.epoch, PROGRESS_EPOCH);
+  const { epoch, ...noEpoch } = abused;
+  assert.equal(parseProfile(JSON.stringify(noEpoch)).bits, 0, 'saves from before epochs also start over');
+  const current = parseProfile(JSON.stringify({ ...freshProfile(), bits: 1234 }));
+  assert.equal(current.bits, 1234); assert.equal(current.resetNotice, undefined);
+});
+test('chests are harder to get: a chest bar fills with match stars, sparse level chests', () => {
+  const profile = freshProfile(), raro = profile.chests.raro;
+  assert.deepEqual(fillChestBar(profile, 3), []); assert.equal(profile.chestBar, 3);
+  for (let i = 0; i < 2; i++) fillChestBar(profile, 3);
+  assert.equal(fillChestBar(profile, 3, () => 0).length, 1, '12 stars give one chest');
+  assert.equal(profile.chestBar, 0); assert.equal(profile.chests.comun, 1, 'mostly common');
+  assert.deepEqual(fillChestBar(profile, 12, () => .999), ['epico']);
+  assert.equal(profile.chests.raro, raro);
+  assert.deepEqual([1, 2, 3, 4, 5, 10].map(levelChest), [null, 'comun', null, 'comun', 'raro', 'epico']);
+  assert.ok(CHESTS.comun.price >= 1000 && CHESTS.legendario.price >= 20000);
+});
 test('rare and better characters level up with repeats, up to level 10', () => {
   assert.equal(copiesFor(1), 0); assert.equal(copiesFor(2), 1); assert.equal(copiesFor(3), 2); assert.equal(copiesFor(CHARACTER_MAX_LEVEL), 25);
   const profile = freshProfile();
@@ -399,6 +420,7 @@ test('AI hunts visible exposed trails but ignores a ghosted recent half', () => 
   arena.ai(bot); assert.ok(bot.desired > 1);
 });
 test('profile round-trips, migrates old crates and rejects bad balances, chests or unowned characters', () => {
+  // Saves of the current epoch are migrated; older epochs start over (see the reset test).
   const profile = freshProfile();
   assert.deepEqual(parseProfile(JSON.stringify(profile)), profile);
   profile.bits = -1; assert.throws(() => parseProfile(JSON.stringify(profile)));
@@ -407,12 +429,12 @@ test('profile round-trips, migrates old crates and rejects bad balances, chests 
   profile.skins = ['yeti']; assert.equal(parseProfile(JSON.stringify(profile)).skin, 'yeti');
   profile.chests.epico = -2; assert.throws(() => parseProfile(JSON.stringify(profile)));
   // A save from the previous version: single crate counter and skill slots.
-  const old = { version: 1, bits: 5, xp: 0, crates: 2, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: ['spectre'], trails: ['cyan'], slots: ['dash', 'shield'] };
+  const old = { version: 1, epoch: PROGRESS_EPOCH, bits: 5, xp: 0, crates: 2, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: ['spectre'], trails: ['cyan'], slots: ['dash', 'shield'] };
   // The free-chest timer is a real timestamp and must survive a reload.
   const waiting = Object.assign(freshProfile(), { freeChestAt: Date.now() + 3 * 3600000 });
   assert.equal(parseProfile(JSON.stringify(waiting)).freeChestAt, waiting.freeChestAt);
   const tampered = Object.assign(freshProfile(), { freeChestAt: Date.now() + 999 * 3600000 });
-  assert.ok(parseProfile(JSON.stringify(tampered)).freeChestAt <= Date.now() + 4 * 3600000);
+  assert.ok(parseProfile(JSON.stringify(tampered)).freeChestAt <= Date.now() + FREE_CHEST_HOURS * 3600000);
   const migrated = parseProfile(JSON.stringify(old));
   assert.equal(migrated.chests.raro, 2); assert.equal(migrated.slots, undefined); assert.deepEqual(migrated.skins, ['spectre']);
 });

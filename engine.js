@@ -5,11 +5,11 @@ export const CELL_PIXELS = 20;
 export const COLORS = ['#2fa8ff', '#ff4f7b', '#5cc93b', '#ff9a1f', '#9b5cff', '#f5b800', '#ff5fc8'];
 // Rarity drives how many powers a character has and how fast they recharge.
 export const RARITIES = {
-  comun: { name: 'Común', color: '#9fb3d9', cooldown: 1, refund: 40 },
-  raro: { name: 'Raro', color: '#3fd0ff', cooldown: 1, refund: 80 },
-  epico: { name: 'Épico', color: '#b45cff', cooldown: .9, refund: 160 },
-  legendario: { name: 'Legendario', color: '#ffc21f', cooldown: .8, refund: 320 },
-  mitico: { name: 'Mítico', color: '#ff4f8b', cooldown: .65, refund: 640 }
+  comun: { name: 'Común', color: '#9fb3d9', cooldown: 1, refund: 20 },
+  raro: { name: 'Raro', color: '#3fd0ff', cooldown: 1, refund: 40 },
+  epico: { name: 'Épico', color: '#b45cff', cooldown: .9, refund: 80 },
+  legendario: { name: 'Legendario', color: '#ffc21f', cooldown: .8, refund: 160 },
+  mitico: { name: 'Mítico', color: '#ff4f8b', cooldown: .65, refund: 320 }
 };
 export const RARITY_ORDER = Object.keys(RARITIES);
 // Duration 0 means the power acts instantly (a shot, a bomb, a freeze).
@@ -80,12 +80,33 @@ export const TRAILS = [
 ];
 // Chest odds are percentages per rarity; they are shown to players in the chest screen.
 export const CHESTS = {
-  comun: { name: 'Cofre común', price: 300, odds: { comun: 70, raro: 25, epico: 5 } },
-  raro: { name: 'Cofre raro', price: 900, odds: { comun: 35, raro: 45, epico: 15, legendario: 5 } },
-  epico: { name: 'Cofre épico', price: 2500, odds: { raro: 35, epico: 45, legendario: 15, mitico: 5 } },
-  legendario: { name: 'Cofre legendario', price: 6000, odds: { epico: 40, legendario: 45, mitico: 15 } }
+  comun: { name: 'Cofre común', price: 1000, odds: { comun: 70, raro: 25, epico: 5 } },
+  raro: { name: 'Cofre raro', price: 3000, odds: { comun: 35, raro: 45, epico: 15, legendario: 5 } },
+  epico: { name: 'Cofre épico', price: 8000, odds: { raro: 35, epico: 45, legendario: 15, mitico: 5 } },
+  legendario: { name: 'Cofre legendario', price: 20000, odds: { epico: 40, legendario: 45, mitico: 15 } }
 };
-export const FREE_CHEST_HOURS = 4;
+export const FREE_CHEST_HOURS = 8;
+// Match chests: the stars of each match (0–3) fill a chest bar; every CHEST_BAR stars give
+// one chest, mostly common. About five good matches per chest.
+export const CHEST_BAR = 12;
+export const BAR_CHEST_ODDS = { comun: 75, raro: 22, epico: 3 };
+export function fillChestBar(profile, stars, random = Math.random) {
+  profile.chestBar = (profile.chestBar || 0) + Math.max(0, Math.floor(stars));
+  const won = [];
+  while (profile.chestBar >= CHEST_BAR) {
+    profile.chestBar -= CHEST_BAR;
+    let roll = random() * 100;
+    const type = Object.keys(BAR_CHEST_ODDS).find(t => (roll -= BAR_CHEST_ODDS[t]) < 0) || 'comun';
+    profile.chests[type]++; won.push(type);
+  }
+  return won;
+}
+// Level-up chests: a common one every 2 levels, rare every 5, epic every 10.
+export const levelChest = level => level % 10 === 0 ? 'epico' : level % 5 === 0 ? 'raro' : level % 2 === 0 ? 'comun' : null;
+// Progress epoch: saves from an earlier epoch start over (keeping the name), so a reset of
+// everyone's progress reaches every phone and the cloud. The game server only accepts
+// phones of the current epoch, and only counts ranking rows marked with it.
+export const PROGRESS_EPOCH = 2;
 export const levelFor = xp => 1 + Math.floor((Math.max(0, xp) / 200) ** (1 / 1.45));
 export const levelXP = level => Math.ceil(200 * (level - 1) ** 1.45);
 
@@ -150,7 +171,7 @@ export const MISSIONS = {
   online: { icon: '🌐', text: n => n > 1 ? `Juega ${n} partidas en línea` : 'Juega una partida en línea', goals: [1, 2], reward: 100 },
   wins: { icon: '🏆', text: () => 'Pinta más de la mitad del mapa', goals: [1], reward: 150 }
 };
-export const MISSION_BONUS = 'raro';
+export const MISSION_BONUS = 'comun';
 export function missionsFor(day) {
   let seed = [...day].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0, 7);
   const next = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0);
@@ -193,7 +214,7 @@ export function claimMissionBonus(profile, day) {
 }
 // Daily streak: one reward a day, better each day in a row, a week long and then again.
 // Missing a day starts over at day 1.
-export const STREAK_REWARDS = [{ bits: 100 }, { bits: 150 }, { chest: 'comun' }, { bits: 250 }, { chest: 'raro' }, { bits: 400 }, { chest: 'epico' }];
+export const STREAK_REWARDS = [{ bits: 60 }, { bits: 80 }, { chest: 'comun' }, { bits: 120 }, { bits: 150 }, { chest: 'comun' }, { chest: 'raro' }];
 export const addDays = (day, n) => new Date(Date.parse(day + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
 export function streakStatus(profile, day) {
   const { last = '', count = 0 } = profile.streak || {};
@@ -231,7 +252,7 @@ export function crossedCells(x0, y0, x1, y1) {
 export const emptyChests = () => Object.fromEntries(Object.keys(CHESTS).map(type => [type, 0]));
 export function freshProfile() {
   // New players start with a rare chest so their first character with a power is one tap away.
-  return { version: 1, name: '', updatedAt: 0, points: 0, ranked: true, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], copies: {}, easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0, daily: { day: '', progress: {}, claimed: [], bonus: false }, streak: { last: '', count: 0 }, friends: [], seasonClaimed: '' };
+  return { version: 1, epoch: PROGRESS_EPOCH, name: '', updatedAt: 0, points: 0, ranked: true, chestBar: 0, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], copies: {}, easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0, daily: { day: '', progress: {}, claimed: [], bonus: false }, streak: { last: '', count: 0 }, friends: [], seasonClaimed: '' };
 }
 // Player nicknames: 3 to 14 letters, digits, spaces, "_" or "-". Returns '' when unusable.
 export function cleanName(text) {
@@ -245,6 +266,9 @@ export const ownsCharacter = (profile, id) => {
 export function parseProfile(raw) {
   const data = JSON.parse(raw), result = freshProfile();
   if (!data || data.version !== 1) throw new Error('Perfil incompatible');
+  // A save from an earlier epoch starts over, keeping only the name and easy mode;
+  // `resetNotice` lets the game explain it once.
+  if (data.epoch !== PROGRESS_EPOCH) return { ...result, name: cleanName(data.name), easy: data.easy === true, resetNotice: true };
   const count = value => Number.isFinite(value) && value >= 0 && value <= 1e12;
   for (const key of ['bits', 'xp', 'wins', 'totalKills', 'best']) {
     if (!count(data[key])) throw new Error('Perfil inválido');
@@ -287,6 +311,7 @@ export function parseProfile(raw) {
   // never counts a victory twice.
   if (data.ranked !== true) result.points = Math.max(result.points, startingPoints(result));
   result.ranked = true;
+  result.chestBar = count(data.chestBar) ? Math.min(CHEST_BAR - 1, Math.floor(data.chestBar)) : 0;
   // Missions and streak are small daily state: a broken copy just starts over.
   const day = text => typeof text === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(text);
   const d = data.daily;
@@ -462,7 +487,7 @@ export class Arena {
     this.emit('reward', { id: actor.id, bits, xp, kills });
   }
   reward(cells = 0, kills = 0, actor = this.actors[0]) {
-    this.grant(actor, cells / SIZE * 100 * 18 + kills * 120, cells / SIZE * 100 * 30 + kills * 100, kills);
+    this.grant(actor, cells / SIZE * 100 * 6 + kills * 40, cells / SIZE * 100 * 30 + kills * 100, kills);
   }
   active(actor, skill) { return (actor.timers[skill] || 0) > this.time; }
   cooldown(actor, skill) { return POWERS[skill].cooldown * RARITIES[actor.rarity || 'comun'].cooldown; }
@@ -745,7 +770,7 @@ export class Arena {
         if (distance < .85) {
           this.orbs.splice(i, 1); this.orbRevision++; actor.harvestUntil = this.time + 10;
           this.emit('orb', { id: actor.id, x: orb.x, y: orb.y });
-          if (actor.human) this.grant(actor, 4, 2);
+          if (actor.human) this.grant(actor, 2, 2);
         }
       }
     }
