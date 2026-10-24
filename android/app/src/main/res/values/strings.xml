@@ -4,4 +4,5 @@
     <string name="title_activity_main">Pintamundo</string>
     <string name="package_name">com.braktio.pintamundo</string>
     <string name="custom_url_scheme">com.braktio.pintamundo</string>
+    <string name="admob_app_id">ca-app-pub-8874186940779998~9639642633</string>
 </resources>

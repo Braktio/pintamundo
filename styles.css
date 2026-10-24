@@ -633,3 +633,7 @@ body.in-match { touch-action:none; overscroll-behavior:none }
 .rank-season { color:#fff6a8!important }
 .rank-hint { margin:6px 0; font-weight:800; color:#fff; text-align:center }
 .rank-tabs button { font-size:17px }
+
+/* Rewarded-ad offers (Android app) */
+.dialog-button.ad-button,.card-foot.ad-button { background:linear-gradient(#fff6a8,var(--yellow) 55%,var(--yellow-deep)); color:var(--ink); -webkit-text-stroke:0 }
+.card-foot.ad-button { border-top:4px solid var(--ink); font-size:18px }

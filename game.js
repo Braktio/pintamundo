@@ -3,6 +3,7 @@ import { Renderer, shade } from './renderer.js';
 import { Connection, Mirror, defaultServer, rememberServer, normalizeServer } from './online.js';
 import * as cloud from './cloud.js';
 import { music } from './music.js';
+import { adReady, watchAd, preloadAd } from './ads.js';
 
 const $ = id => document.getElementById(id);
 const root = document.documentElement;
@@ -365,6 +366,7 @@ function renderFreeChest() {
   const wait = freeChestIn(), hours = Math.floor(wait / 3600000), minutes = Math.ceil(wait % 3600000 / 60000);
   $('free-chest').disabled = wait > 0;
   $('free-chest-label').textContent = wait ? `⏱️ ${hours ? hours + ' h ' : ''}${minutes} min` : '¡RECLAMAR!';
+  $('free-chest-ad').hidden = !wait || !adReady();
   $('free-crate-badge').hidden = !(totalChests() || !wait);
 }
 function renderMenu() {
@@ -472,6 +474,15 @@ $('chest-shop').onclick = event => {
   const type = button.dataset.buy; if (profile.bits < CHESTS[type].price) return;
   profile.bits -= CHESTS[type].price; revealChest(type);
 };
+// A rewarded ad opens the free chest right away; the 4-hour wait starts again.
+$('free-chest-ad').onclick = async () => {
+  if (freeChestIn() <= 0 || !adReady()) return;
+  $('free-chest-ad').disabled = true;
+  const rewarded = await watchAd();
+  $('free-chest-ad').disabled = false;
+  if (!rewarded) { renderFreeChest(); toast('Mira el anuncio completo para abrir el cofre.'); return; }
+  profile.freeChestAt = Date.now() + FREE_CHEST_HOURS * 3600000; revealChest('comun');
+};
 $('free-chest').onclick = () => {
   if (freeChestIn() > 0) return;
   profile.freeChestAt = Date.now() + FREE_CHEST_HOURS * 3600000; revealChest('comun');
@@ -555,7 +566,7 @@ function end(won, reason, ranking = null) {
   const completed = recordMatch(profile, today(), { kills: player.kills, percent, orbs: matchStats.orbs, powers: matchStats.powers, online: !!mirror, won });
   save(true);
   for (const mission of completed) toast(`✅ Misión cumplida: ${mission.text}. ¡Reclámala en Misiones!`);
-  void askNotifications();
+  void askNotifications(); preloadAd();
   const currentGeneration = generation;
   setTimeout(() => {
     if (currentGeneration !== generation) return;
@@ -563,10 +574,17 @@ function end(won, reason, ranking = null) {
     const earned = matchChests.splice(0);
     const title = perfect ? '¡MAPA COMPLETO! 🌍' : won ? '¡GANASTE! 🏆' : stars >= 2 ? '¡Muy bien!' : stars ? '¡Buen intento!' : '¡Casi lo tienes!';
     const chests = earned.length ? `<div class="earned-chests">${earned.map(c => `<div class="prize-chest chest-${c.type}">${chestSVG(c.type, 56)}<b>${CHESTS[c.type].name}</b><small>${c.reason}</small></div>`).join('')}</div>` : '<p>Pinta un poco más para ganar un cofre 🎁</p>';
-    const actions = `<div class="dialog-buttons"><button class="dialog-button" id="retry">${!online ? '¡OTRA VEZ! ▶' : online.private ? '👫 Volver a la sala' : '¡OTRA PARTIDA! ▶'}</button><button class="dialog-button secondary" id="to-menu">🏠 Menú</button></div>`;
+    const bonus = Math.floor(arena.bits), adOffer = bonus > 0 && adReady() ? `<div class="dialog-buttons"><button class="dialog-button ad-button" id="ad-double">📺 Duplica tus estrellas: +${number(bonus)} ⭐</button></div>` : '';
+    const actions = `${adOffer}<div class="dialog-buttons"><button class="dialog-button" id="retry">${!online ? '¡OTRA VEZ! ▶' : online.private ? '👫 Volver a la sala' : '¡OTRA PARTIDA! ▶'}</button><button class="dialog-button secondary" id="to-menu">🏠 Menú</button></div>`;
     const wire = () => {
       $('retry').onclick = !online ? start : online.private ? () => online.lobby ? showLobby(online.lobby) : toast('La sala se está preparando…') : () => joinOnline('quick');
       $('to-menu').onclick = menu;
+      if ($('ad-double')) $('ad-double').onclick = async () => {
+        const button = $('ad-double'); button.disabled = true;
+        if (!await watchAd()) { button.disabled = false; button.hidden = !adReady(); toast('Mira el anuncio completo para duplicar tus estrellas.'); return; }
+        profile.bits += bonus; save(true); renderMenu(); tone('level');
+        button.textContent = `✓ +${number(bonus)} ⭐ ¡Duplicadas!`;
+      };
     };
     const opener = `<div class="dialog-buttons"><button class="dialog-button" id="open-earned">🎁 ¡ABRIR ${earned.length > 1 ? earned.length + ' COFRES' : 'COFRE'}!</button></div>`;
     dialog(`<p class="eyebrow">${perfect ? '¡Pintaste todo el mapa!' : won ? '¡Pintaste más de la mitad!' : 'Fin de la partida'}</p><div class="result-stars" aria-label="${stars} de 3 estrellas">${[0, 1, 2].map(i => `<span class="${i < stars ? '' : 'off'}">⭐</span>`).join('')}</div><h2>${title}</h2><p>${perfect ? '¡Todo el mapa es de tu color!' : won ? '¡Más de la mitad del mapa es de tu color! ' + reason : reason}</p><div class="results"><div><strong>${Math.round(percent)}%</strong><small>🎨 Pintado</small></div><div><strong>${player.kills}</strong><small>🎯 Atrapados</small></div><div><strong>+${number(arena.bits)}</strong><small>⭐ Estrellas</small></div></div><p>+${number(arena.xp)} XP · Nivel ${levelFor(profile.xp)}</p>${ranked ? '<div id="match-trophies" class="rank-result">🏆 Calculando copas…</div>' : `<p class="rank-hint">🏆 Las copas del ranking se ganan en partidas en línea${account ? '' : ' con tu cuenta de Google'}.</p>`}${chests}${earned.length ? opener : actions}`);
@@ -1260,4 +1278,6 @@ showScreen('home'); requestAnimationFrame(frame);
 if (storageError) toast('No se pudo cargar tu progreso de este teléfono.');
 // The cloud copy is checked first, so a returning player is not asked for a new name;
 // a slow network only delays the question by two seconds.
+// A rewarded ad starts loading a little after launch, so the offers can appear.
+setTimeout(preloadAd, 3000);
 Promise.race([restoreAccount(), new Promise(resolve => setTimeout(resolve, 2000))]).finally(() => { if (!profile.name && state === 'menu' && !$('dialog').open) editName(true); else followInvite(); });

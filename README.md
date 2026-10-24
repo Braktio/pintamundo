@@ -174,6 +174,20 @@ La pestaña **Rangos** muestra tu emblema, el avance al siguiente nivel, la esca
 - En una sala de amigos, **📤 Invitar** comparte un enlace `https://braktio.github.io/pintamundo/?sala=GATO42` (con `@capacitor/share` en la APK, el menú de compartir del navegador o el portapapeles). Al abrirlo, el juego entra en esa sala en cuanto el jugador tiene nombre.
 - En las partidas en línea, el botón 😀 muestra 6 emotes. El servidor los reenvía a la sala (como mucho uno cada 1,5 s por jugador y solo de la lista) y aparecen en una burbuja sobre el personaje. No hay chat.
 
+## Anuncios con recompensa
+
+Solo en la APK, con Google AdMob (`ads.js`, plugin `@capacitor-community/admob`). No hay banners ni anuncios obligatorios: el jugador elige ver un vídeo a cambio de algo.
+
+- Al terminar una partida: **📺 Duplica tus estrellas** (una vez por partida).
+- Con el cofre gratis en espera: **📺 ¡Ábrelo ya!**, y la espera de 4 horas vuelve a empezar.
+
+Al abrir la app, el anuncio empieza a cargarse en segundo plano. Si no hay ninguno listo, la oferta no aparece. Antes de cargarlo se pide el consentimiento de Google en los países que lo exigen, y los anuncios se limitan a contenido apto para todo público (`ParentalGuidance`).
+
+- ID de la app: `ca-app-pub-8874186940779998~9639642633`, en `android/app/src/main/res/values/strings.xml`.
+- Bloque bonificado: `REWARDED_ID` en `ads.js`. Con el bloque de prueba de Google se piden anuncios de prueba.
+
+AdMob limita los anuncios reales hasta que la app esté publicada en Google Play y vinculada en su consola.
+
 ## Privacidad
 
 `privacy.html` (https://braktio.github.io/pintamundo/privacy.html) explica qué datos se usan y cómo borrarlos; se enlaza desde la cuenta. En **☁️ Cuenta de Google → Borrar mis datos de la nube** se eliminan `users/{uid}` y `ranking/{uid}`; el progreso del teléfono se conserva.
