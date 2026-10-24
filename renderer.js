@@ -27,7 +27,7 @@ export class Renderer {
     this.ctx = canvas.getContext('2d', { alpha: false });
     this.camera = { x: 42, y: 36 };
     this.particles = []; this.floats = []; this.rings = []; this.brokenTrails = []; this.poofs = [];
-    this.pops = {}; this.moods = {}; this.patterns = new Map(); this.portraits = new Map();
+    this.pops = {}; this.moods = {}; this.portraits = new Map();
     this.cachedRevision = -1;
     this.reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.resize();
@@ -41,7 +41,6 @@ export class Renderer {
     this.dpr = Math.min(devicePixelRatio || 1, 1.5);
     this.canvas.width = Math.round(this.width * this.dpr);
     this.canvas.height = Math.round(this.height * this.dpr);
-    this.patterns?.clear();
   }
   project(x, y, z = 0) {
     // Z never changes the ground projection; elevation cannot introduce parallax.
@@ -55,34 +54,46 @@ export class Renderer {
     points.forEach((p, i) => { const q = this.project(...p); if (i) c.lineTo(q.x, q.y); else c.moveTo(q.x, q.y); });
     if (close) c.closePath();
   }
+  // Zones are painted, not tiled: every cell is a round dab of paint, so outlines come out
+  // curvy. Border cells get slightly uneven dabs and a few droplets outside, like splashed
+  // paint. The whole board is drawn into an offscreen canvas when the map changes (at most
+  // about 8 times a second) and copied to the screen every frame.
   rebuild(arena) {
-    this.runs = arena.actors.map(() => []); this.edges = arena.actors.map(() => []);
-    for (let y = 0; y < HEIGHT; y++) for (let x = 0; x < WIDTH;) {
-      const id = arena.grid[y * WIDTH + x]; if (id < 0) { x++; continue; }
-      let end = x + 1; while (end < WIDTH && arena.grid[y * WIDTH + end] === id) end++;
-      this.runs[id].push([x, y, end]); x = end;
+    const px = Math.min(24, Math.max(8, Math.round(this.scale * this.dpr)));
+    if (!this.zones || this.zones.width !== WIDTH * px) {
+      this.zones = document.createElement('canvas'); this.zones.width = WIDTH * px; this.zones.height = HEIGHT * px;
     }
-    for (let i = 0; i < SIZE; i++) {
-      const id = arena.grid[i]; if (id < 0) continue;
-      const x = i % WIDTH, y = Math.floor(i / WIDTH), edges = this.edges[id];
-      if (!y || arena.grid[i - WIDTH] !== id) edges.push([x, y, x + 1, y]);
-      if (y === HEIGHT - 1 || arena.grid[i + WIDTH] !== id) edges.push([x, y + 1, x + 1, y + 1]);
-      if (!x || arena.grid[i - 1] !== id) edges.push([x, y, x, y + 1]);
-      if (x === WIDTH - 1 || arena.grid[i + 1] !== id) edges.push([x + 1, y, x + 1, y + 1]);
-    }
-    this.cachedArena = arena; this.cachedRevision = arena.revision;
-  }
-  // A soft tile per color, two cells wide, aligned to the board when drawn.
-  pattern(color) {
-    const size = Math.max(8, Math.round(this.scale * 2)), key = color + size;
-    if (!this.patterns.has(key)) {
-      const tile = document.createElement('canvas'); tile.width = tile.height = size;
-      const t = tile.getContext('2d');
-      t.fillStyle = shade(color, .55); t.fillRect(0, 0, size, size);
-      t.fillStyle = shade(color, .42); t.fillRect(0, 0, size / 2, size / 2); t.fillRect(size / 2, size / 2, size / 2, size / 2);
-      this.patterns.set(key, this.ctx.createPattern(tile, 'repeat'));
-    }
-    return this.patterns.get(key);
+    const z = this.zones.getContext('2d'), owners = arena.actors.map(() => []);
+    z.clearRect(0, 0, this.zones.width, this.zones.height);
+    for (let i = 0; i < SIZE; i++) if (arena.grid[i] >= 0) owners[arena.grid[i]]?.push(i);
+    // A steady pseudo-random number per cell, so the splashes do not flicker between redraws.
+    const noise = (i, salt) => ((Math.imul(i + 1, 2654435761) ^ Math.imul(salt, 40503)) >>> 0) % 1000 / 1000;
+    arena.actors.forEach((actor, id) => {
+      const dabs = [], marks = [];
+      for (const i of owners[id]) {
+        const x = i % WIDTH, y = Math.floor(i / WIDTH), mine = j => arena.grid[j] === id;
+        const open = [[x > 0 && mine(i - 1), -1, 0], [x < WIDTH - 1 && mine(i + 1), 1, 0], [y > 0 && mine(i - WIDTH), 0, -1], [y < HEIGHT - 1 && mine(i + WIDTH), 0, 1]].filter(n => !n[0]);
+        dabs.push([x + .5, y + .5, open.length ? .6 + noise(i, 1) * .22 : .78]);
+        // Droplets just outside some border cells, flung outwards.
+        if (open.length && noise(i, 2) < .2) {
+          const [, dx, dy] = open[Math.floor(noise(i, 3) * open.length)], reach = .75 + noise(i, 4) * .35;
+          dabs.push([x + .5 + dx * reach + (noise(i, 5) - .5) * .5, y + .5 + dy * reach + (noise(i, 6) - .5) * .5, .16 + noise(i, 7) * .14]);
+        }
+        // Lighter patches inside the zone, so it reads as wet paint rather than a flat color.
+        if (!open.length && noise(i, 8) < .05) marks.push([x + .5, y + .5, 1 + noise(i, 9) * .6]);
+      }
+      if (!dabs.length) return;
+      const fill = (list, grow, dy, style, alpha = 1) => {
+        z.beginPath();
+        for (const [x, y, r] of list) { const cx = x * px, cy = (y + dy) * px, rr = Math.max(.05, r + grow) * px; z.moveTo(cx + rr, cy); z.arc(cx, cy, rr, 0, Math.PI * 2); }
+        z.globalAlpha = alpha; z.fillStyle = style; z.fill(); z.globalAlpha = 1;
+      };
+      fill(dabs, .13, .24, shade(actor.color, -.3));
+      fill(dabs, .13, 0, INK);
+      fill(dabs, 0, 0, shade(actor.color, .48));
+      fill(marks, 0, 0, shade(actor.color, .66), .55);
+    });
+    this.cachedArena = arena; this.cachedRevision = arena.revision; this.zonesScale = this.scale; this.builtAt = performance.now();
   }
   burst(x, y, color, count = 12, shape = 'star') {
     // Always allocate exactly 35 for a death; reduced motion shortens their travel.
@@ -102,7 +113,12 @@ export class Renderer {
       const victim = arena.actors[event.id];
       this.burst(event.x, event.y, victim.color, 35);
       this.poofs.push({ x: event.x, y: event.y, actor: { ...victim }, life: 1.2 });
-      if (event.trail?.length) this.brokenTrails.push({ points: event.trail.map(coords), cut: event.trail.lastIndexOf(event.cutIndex), color: victim.color, life: 1.2 });
+      if (event.trail?.length) {
+        const points = this.paths?.[event.id]?.points || event.trail.map(coords), at = event.cutIndex >= 0 ? coords(event.cutIndex) : null;
+        const cut = at ? points.reduce((best, p, i) => Math.hypot(p.x - at.x, p.y - at.y) < Math.hypot(points[best].x - at.x, points[best].y - at.y) ? i : best, 0) : -1;
+        this.brokenTrails.push({ points, cut, color: victim.color, life: 1.2 });
+        delete this.paths?.[event.id];
+      }
       if (event.killer >= 0) this.moods[event.killer] = 1.5;
       if (event.killer === 0) this.text(event.x, event.y, event.revenge ? '¡DESQUITE!' : '¡ATRAPADO! +120 ⭐', '#ff5f8f', 24);
     }
@@ -132,35 +148,23 @@ export class Renderer {
     }
     if (event.type === 'fragments' && event.cells) this.text(event.to.x, event.to.y + 1.5, '¡ZONA EXTRA!', event.color, 16);
   }
-  // Zones look like raised islands: a dark "thickness" below, a light top and a navy rim.
+  // Zones: the painted board from rebuild(), refreshed when the map changes.
   territory(arena) {
-    const c = this.ctx, origin = this.project(0, 0), depth = Math.max(3, this.scale * .25);
-    if (this.cachedArena !== arena || this.cachedRevision !== arena.revision) this.rebuild(arena);
-    for (const actor of arena.actors) {
-      if (!this.runs[actor.id].length) continue;
-      // A fresh capture makes the whole zone bounce briefly around its owner.
-      const pop = this.reduced ? 0 : this.pops[actor.id] || 0, center = this.project(actor.x, actor.y);
-      const top = new Path2D(), rim = new Path2D();
-      for (const [x, y, end] of this.runs[actor.id]) {
-        const p = this.project(x, y);
-        if (p.y < -this.scale * 2 || p.y > this.height + this.scale || p.x > this.width + this.scale || p.x + (end - x) * this.scale < -this.scale) continue;
-        top.rect(p.x, p.y, (end - x) * this.scale + .5, this.scale + .5);
-      }
-      for (const [x, y, x2, y2] of this.edges[actor.id]) {
-        const a = this.project(x, y), b = this.project(x2, y2);
-        if (a.x < -this.scale || a.x > this.width + this.scale || a.y < -this.scale || a.y > this.height + this.scale) continue;
-        rim.moveTo(a.x, a.y); rim.lineTo(b.x, b.y);
-      }
-      c.save();
-      if (pop > 0) { const k = 1 + Math.sin(pop * Math.PI) * .045; c.translate(center.x, center.y); c.scale(k, k); c.translate(-center.x, -center.y); }
-      c.save(); c.translate(0, depth); c.fillStyle = shade(actor.color, -.25); c.fill(top);
-      c.lineJoin = 'round'; c.strokeStyle = INK; c.lineWidth = 3; c.stroke(rim); c.restore();
-      const fill = this.pattern(actor.color);
-      fill.setTransform?.(new DOMMatrix([1, 0, 0, 1, origin.x, origin.y]));
-      c.fillStyle = fill; c.fill(top);
-      c.lineCap = 'round'; c.strokeStyle = INK; c.lineWidth = 3; c.stroke(rim);
-      c.restore();
-    }
+    const stale = this.cachedArena !== arena || this.zonesScale !== this.scale;
+    if (stale || (this.cachedRevision !== arena.revision && performance.now() - this.builtAt > 120)) this.rebuild(arena);
+    const a = this.project(0, 0);
+    this.ctx.drawImage(this.zones, a.x, a.y, WIDTH * this.scale, HEIGHT * this.scale);
+  }
+  // The real route of an actor since it left its zone (positions sampled as it moves), so
+  // its paint trail follows the movement smoothly instead of stepping along grid cells.
+  path(actor) {
+    this.paths ??= {};
+    if (!actor.alive || !actor.trail.length) { delete this.paths[actor.id]; return []; }
+    let route = this.paths[actor.id];
+    if (!route || route.first !== actor.trail[0]) route = this.paths[actor.id] = { first: actor.trail[0], points: actor.trail.map(coords) };
+    const last = route.points.at(-1);
+    if (Math.hypot(actor.x - last.x, actor.y - last.y) > .3) route.points.push({ x: actor.x, y: actor.y });
+    return [...route.points, { x: actor.x, y: actor.y }];
   }
   // Wide translucent paint band with a light core, like a freshly painted road.
   trail(points, color, width = 7, opacity = 1) {
@@ -1070,7 +1074,7 @@ export class Renderer {
       this.character({ ...player, x: 50, y: 31, angle: Math.PI, trail: [] }, null, time, { at: this.project(50, 31), size: 2.2 });
     } else {
       for (const actor of arena.actors) if (actor.alive) {
-        const points = actor.trail.map(coords); points.push({ x: actor.x, y: actor.y });
+        const points = this.path(actor);
         const midpoint = Math.floor(points.length / 2), width = actor.id === 0 && arena.easy ? 10 : 7;
         if (arena.active(actor, 'ghost')) {
           this.trail(points.slice(0, midpoint + 1), actor.color, width); this.trail(points.slice(midpoint), actor.color, width - 2, .25);

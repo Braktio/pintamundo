@@ -277,7 +277,7 @@ El servidor público está en **https://pintamundo.onrender.com**, creado desde 
 ## Archivos
 
 - `engine.js`: conquista, colisiones de punta, superposición de estelas, IA, Wall Surge, habilidades y validación del perfil.
-- `renderer.js`: cámara ortográfica, motos cenitales sombreadas, plasma, glow, chispas y estelas rotas.
+- `renderer.js`: cámara ortográfica, personajes, efectos y la pintura: las zonas son manchas (un círculo por casilla, con bordes irregulares, salpicaduras y sombra) dibujadas en un lienzo aparte que se rehace como mucho unas 8 veces por segundo, y las estelas siguen el recorrido real del personaje (`path`) en lugar de las casillas.
 - `game.js`: bucle, joystick invisible multitáctil, HUD, audio, orientación siempre horizontal, pantalla completa, rangos y persistencia.
 - `music.js`: música de fondo generada con Web Audio.
 - `cloud.js`: inicio de sesión con Google y copia del perfil en Firestore (solo en la app).
