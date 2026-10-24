@@ -1,6 +1,6 @@
 // Authoritative online rooms. The server runs the same engine as solo games and
 // streams compact deltas; phones only send their heading and power presses.
-import { Arena, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, CHARACTER_MAX_LEVEL, SIZE, PROGRESS_EPOCH, freshProfile, cleanName, matchStars } from './engine.js';
+import { Arena, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, SIZE, PROGRESS_EPOCH, freshProfile, cleanName, matchStars } from './engine.js';
 
 export const STEP = 1 / 90;
 // 30 updates per second keep online movement smooth on phones.
@@ -14,8 +14,8 @@ export const FROZEN = 32, WALL = 64, HUMAN = 128;
 // Number of quick emotes the phones can show (EMOTES in game.js).
 export const EMOTES = 6;
 const validSkin = id => CHARACTERS.some(c => c.id === id) ? id : CHARACTERS[0].id;
-// The phone reports its character's level (1–10); anything else counts as level 1.
-const validLevel = level => Number.isInteger(level) && level >= 1 && level <= CHARACTER_MAX_LEVEL ? level : 1;
+// The phone reports its character's level; anything that is not a sensible level counts as 1.
+const validLevel = level => Number.isInteger(level) && level >= 1 && level <= 1000 ? level : 1;
 const validColor = color => [...TRAILS.map(t => t.color), ...COLORS].includes(color) ? color : COLORS[0];
 const normalizeCode = code => String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
 // Players are shown with their nickname, or their character's name if they have none.

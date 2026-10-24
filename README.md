@@ -71,12 +71,12 @@ Los bots también reciben personajes al azar (los raros aparecen menos) y usan s
 
 ## Niveles de personaje
 
-Los personajes **raros, épicos, legendarios y míticos** suben de nivel, del 1 al 10, con los repetidos que salen en los cofres (`characterLevel` y `copiesFor` en `engine.js`). Para pasar del nivel *n* al *n*+1 hacen falta ⌈*n*/2⌉ repetidos: 25 en total hasta el nivel 10. Cada nivel aumenta un **6 % el alcance** de sus poderes (+54 % en el nivel 10):
+Los personajes **raros, épicos, legendarios y míticos** suben de nivel con los repetidos que salen en los cofres, **sin nivel máximo** (`characterLevel` y `copiesFor` en `engine.js`). Para pasar del nivel *n* al *n*+1 hacen falta ⌈*n*/2⌉ repetidos (25 hasta el nivel 10, 120 hasta el 20). Cada nivel aumenta el **alcance** de sus poderes: +4 % por nivel hasta el 10 (+36 %) y luego +1 % por nivel, con un máximo de **+60 %** en el nivel 34. A partir de ahí el nivel sigue subiendo, pero el alcance ya no crece (`powerScale`):
 
 - Distancia: alcance del Disparo y de su pintura, radio de la Bomba, de Congelar, del Imán y del pincel del Rodillo.
 - Duración, en los poderes sin distancia: Turbo, Burbuja y Fantasma.
 
-Mientras queden premios nuevos en la rareza sorteada, 1 de cada 4 cofres da un repetido de un personaje tuyo que aún pueda subir. Los comunes no suben de nivel; sus repetidos, igual que los de un personaje en el nivel 10 o los de un color, se devuelven en estrellas. Los robots juegan siempre a nivel 1. En línea, el teléfono envía el nivel y el servidor solo acepta valores del 1 al 10. La colección muestra el nivel, los repetidos que faltan y el alcance extra.
+Mientras queden premios nuevos en la rareza sorteada, 1 de cada 4 cofres da un repetido de un personaje tuyo que aún pueda subir. Los comunes no suben de nivel: sus repetidos, igual que los de un color, se devuelven en estrellas. Los robots juegan siempre a nivel 1. En línea, el teléfono envía el nivel y el servidor solo acepta valores razonables (del 1 al 1.000). La colección muestra el nivel, los repetidos que faltan y el alcance extra.
 
 La foto de perfil (arriba a la izquierda y en el ranking mundial) es el personaje elegido en ese momento.
 

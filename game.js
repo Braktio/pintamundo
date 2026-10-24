@@ -1,4 +1,4 @@
-import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, tierStart, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonReward, CHARACTER_MAX_LEVEL, CHEST_BAR, PROGRESS_EPOCH, fillChestBar, levelChest, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
+import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, tierStart, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonReward, CHEST_BAR, PROGRESS_EPOCH, fillChestBar, levelChest, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
 import { Renderer, shade } from './renderer.js';
 import { Connection, Mirror, defaultServer } from './online.js';
 import * as cloud from './cloud.js';
@@ -319,7 +319,7 @@ const COLLECTION = {
 // extra reach of its powers.
 function levelInfo(id) {
   const level = characterLevel(profile, id), copies = profile.copies[id] || 0;
-  return { level, max: level >= CHARACTER_MAX_LEVEL, have: copies - copiesFor(level), need: copiesFor(level + 1) - copiesFor(level), bonus: Math.round((powerScale(level) - 1) * 100) };
+  return { level, max: false, have: copies - copiesFor(level), need: copiesFor(level + 1) - copiesFor(level), bonus: Math.round((powerScale(level) - 1) * 100) };
 }
 const levelChip = id => `<span class="level-chip">Nv ${characterLevel(profile, id)}</span>`;
 function levelBlock(id) {

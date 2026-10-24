@@ -307,7 +307,7 @@ export function parseProfile(raw) {
   if (data.copies !== undefined) {
     if (typeof data.copies !== 'object' || data.copies === null || Array.isArray(data.copies)) throw new Error('Niveles inválidos');
     for (const [id, value] of Object.entries(data.copies)) {
-      if (!levelsUp(CHARACTERS.find(c => c.id === id)) || !count(value) || value > 1000) throw new Error('Niveles inválidos');
+      if (!levelsUp(CHARACTERS.find(c => c.id === id)) || !count(value) || value > MAX_COPIES) throw new Error('Niveles inválidos');
       if (value) result.copies[id] = Math.floor(value);
     }
   }
@@ -344,12 +344,13 @@ export function rollRarity(type, random = Math.random) {
   for (const [rarity, weight] of odds) { roll -= weight; if (roll < 0) return rarity; }
   return odds.at(-1)[0];
 }
-// Character levels: rare, epic, legendary and mythic characters level up (1 → 10) with
-// repeats from chests. Going from level n to n+1 takes ceil(n / 2) repeats (25 in all),
-// and every level stretches the reach of the character's powers by 4%.
-export const CHARACTER_MAX_LEVEL = 10, POWER_STEP = .04;
+// Character levels: rare, epic, legendary and mythic characters level up with repeats from
+// chests, with no top level. Going from level n to n+1 takes ceil(n / 2) repeats. Each level
+// stretches the reach of the character's powers: +4% up to level 10, then +1% per level,
+// up to +60% (level 34). Higher levels keep counting, without more reach.
+export const POWER_STEP = .04, LATE_POWER_STEP = .01, MAX_REACH = 1.6, MAX_COPIES = 100000;
 // While there are still new prizes of the rolled rarity, this share of chests gives a
-// repeat of an owned character that can still level up.
+// repeat of an owned character.
 export const REPEAT_CHANCE = .25;
 export const levelsUp = character => !!character && character.rarity !== 'comun';
 export const copiesFor = level => { let total = 0; for (let l = 1; l < level; l++) total += Math.ceil(l / 2); return total; };
@@ -357,16 +358,20 @@ export function characterLevel(profile, id) {
   if (!levelsUp(CHARACTERS.find(c => c.id === id))) return 1;
   const copies = profile.copies?.[id] || 0;
   let level = 1;
-  while (level < CHARACTER_MAX_LEVEL && copies >= copiesFor(level + 1)) level++;
+  // Repeats needed grow by one every two levels, so the next threshold is kept as a sum.
+  for (let next = Math.ceil(level / 2); copies >= next; next += Math.ceil((level + 1) / 2), level++);
   return level;
 }
-export const powerScale = level => 1 + POWER_STEP * (clamp(Math.floor(level) || 1, 1, CHARACTER_MAX_LEVEL) - 1);
+export const powerScale = level => {
+  const l = Math.max(1, Math.floor(level) || 1);
+  return Math.min(MAX_REACH, 1 + POWER_STEP * (Math.min(l, 10) - 1) + LATE_POWER_STEP * Math.max(0, l - 10));
+};
 // Opens one chest into the profile. Unowned prizes of the rolled rarity come first; a repeat
-// of a character that can still level up adds a level step, any other repeat becomes stars.
+// of a rare-or-better character adds a level step, any other repeat becomes stars.
 export function openChest(profile, type, random = Math.random) {
   const rarity = rollRarity(type, random), pool = PRIZES.filter(p => p.rarity === rarity);
   const owned = p => p.type === 'skins' ? ownsCharacter(profile, p.id) : profile.trails.includes(p.id);
-  const growing = p => p.type === 'skins' && levelsUp(p) && owned(p) && characterLevel(profile, p.id) < CHARACTER_MAX_LEVEL;
+  const growing = p => p.type === 'skins' && levelsUp(p) && owned(p);
   const fresh = pool.filter(p => !owned(p)), repeats = pool.filter(growing);
   const options = fresh.length && !(repeats.length && random() < REPEAT_CHANCE) ? fresh : repeats.length ? repeats : pool;
   const prize = options[Math.floor(random() * options.length)];
