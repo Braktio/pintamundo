@@ -106,7 +106,7 @@ El HUD de cristal oscuro reproduce la composición de referencia: silueta de mot
 
 La clasificación muestra los tres líderes con nombres de piloto y puntuación entre paréntesis, calculada como `celdas × 20 + bajas × 1000`. El minimapa refleja territorios y estelas. Los controles respetan áreas seguras y tienen superficies táctiles de al menos 44 px.
 
-Cada punto porcentual conquistado entrega 18 Bits y 30 XP; cada baja, 120 Bits y 100 XP. Se guarda el progreso al obtenerlo y cada 10 segundos. La partida en curso no se restaura al recargar. El nivel sigue `1 + floor((XP / 200)^(1 / 1.45))`.
+Cada punto porcentual conquistado entrega 6 estrellas y 10 XP; cada baja, 40 estrellas y 40 XP; cada estrella del mapa, 2 estrellas y 1 XP. Se guarda el progreso al obtenerlo y cada 10 segundos. La partida en curso no se restaura al recargar. El nivel sigue `1 + floor((XP / 300)^(1 / 1.9))`: nivel 2 con 300 XP, 5 con unos 4.200 y 10 con unos 19.500 (unas 2, 22 y 100 partidas normales).
 
 Gato Rayo se regala en el nivel 2, Platillo Zum en el 5 y Dragoncito en el 10 (también pueden salir en cofres). El botón 🐢 del menú activa el **modo fácil**: los robots van más despacio, cazan desde más cerca y tu camino se dibuja más grueso. Los perfiles anteriores se migran solos: el antiguo contador de cofres pasa a cofres raros.
 

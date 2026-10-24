@@ -45,7 +45,7 @@ try {
   await page('Runtime.enable'); await page('Page.enable');
   await page('Page.addScriptToEvaluateOnNewDocument', { source: 'let randomSeed=482;Math.random=()=>{randomSeed=(Math.imul(randomSeed,1664525)+1013904223)>>>0;return randomSeed/4294967296;};' });
   // Start as Gato Rayo (rare, Turbo) so the power button can be exercised.
-  await page('Page.addScriptToEvaluateOnNewDocument', { source: "if(!localStorage.getItem('neon-frontier.profile.v1'))localStorage.setItem('neon-frontier.profile.v1',JSON.stringify({version:1,epoch:2,name:'Prueba',bits:0,xp:980,wins:0,totalKills:0,best:0,nemesis:'',skin:'tron',trail:'cyan',skins:[],trails:['cyan'],easy:false,chests:{comun:0,raro:1,epico:0,legendario:0},freeChestAt:0}));" });
+  await page('Page.addScriptToEvaluateOnNewDocument', { source: "if(!localStorage.getItem('neon-frontier.profile.v1'))localStorage.setItem('neon-frontier.profile.v1',JSON.stringify({version:1,epoch:2,name:'Prueba',bits:0,xp:2419,wins:0,totalKills:0,best:0,nemesis:'',skin:'tron',trail:'cyan',skins:[],trails:['cyan'],easy:false,chests:{comun:0,raro:1,epico:0,legendario:0},freeChestAt:0}));" });
   await page('Page.navigate', { url: base });
   for (let i = 0; i < 30; i++) { if (await evaluate('document.querySelectorAll(".hangar-card").length') > 30) break; await sleep(150); }
   assert.deepEqual(errors, []);
@@ -120,7 +120,7 @@ try {
   const result = await evaluate('({percent:document.getElementById("hud-territory").textContent,bits:document.getElementById("hud-bits").textContent,dialog:document.getElementById("dialog-content").textContent,profile:JSON.parse(localStorage.getItem("neon-frontier.profile.v1"))})');
   assert.ok(result.profile.bits > 0, 'closing the route awards persistent Bits: ' + JSON.stringify(result));
   assert.ok(result.profile.xp > 0);
-  // The loop crosses level 4 (984 XP), which gives a common chest: it is not announced during the match...
+  // The loop crosses level 4 (2.420 XP), which gives a common chest: it is not announced during the match...
   assert.equal(result.profile.chests.comun, 1, 'the level-up chest is saved right away: ' + JSON.stringify({ xp: result.profile.xp, chests: result.profile.chests, bar: result.profile.chestBar }));
   assert.doesNotMatch(await evaluate('document.getElementById("toasts").textContent'), /[Cc]ofre/, 'no chest messages during the match');
   // ...and opens by itself after the results, followed by the match buttons.

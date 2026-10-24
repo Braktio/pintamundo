@@ -111,8 +111,10 @@ export const levelChest = level => level % 10 === 0 ? 'epico' : level % 5 === 0 
 // everyone's progress reaches every phone and the cloud. The game server only accepts
 // phones of the current epoch, and only counts ranking rows marked with it.
 export const PROGRESS_EPOCH = 2;
-export const levelFor = xp => 1 + Math.floor((Math.max(0, xp) / 200) ** (1 / 1.45));
-export const levelXP = level => Math.ceil(200 * (level - 1) ** 1.45);
+// Levels: 300 XP for level 2, then steeper (level 5 ≈ 4.200 XP, level 10 ≈ 19.000).
+export const LEVEL_BASE = 300, LEVEL_CURVE = 1.9;
+export const levelFor = xp => 1 + Math.floor((Math.max(0, xp) / LEVEL_BASE) ** (1 / LEVEL_CURVE) + 1e-9);
+export const levelXP = level => Math.ceil(LEVEL_BASE * (level - 1) ** LEVEL_CURVE);
 
 // Ranked ladder: 10 ranks with 3 divisions each (Bronce 1 → Bronce 3 → Plata 1 …), 30 tiers.
 // Trophies (🏆) are won or lost after every match; each tier needs a few more than the last.
@@ -493,7 +495,7 @@ export class Arena {
     this.emit('reward', { id: actor.id, bits, xp, kills });
   }
   reward(cells = 0, kills = 0, actor = this.actors[0]) {
-    this.grant(actor, cells / SIZE * 100 * 6 + kills * 40, cells / SIZE * 100 * 30 + kills * 100, kills);
+    this.grant(actor, cells / SIZE * 100 * 6 + kills * 40, cells / SIZE * 100 * 10 + kills * 40, kills);
   }
   active(actor, skill) { return (actor.timers[skill] || 0) > this.time; }
   cooldown(actor, skill) { return POWERS[skill].cooldown * RARITIES[actor.rarity || 'comun'].cooldown; }
@@ -776,7 +778,7 @@ export class Arena {
         if (distance < .85) {
           this.orbs.splice(i, 1); this.orbRevision++; actor.harvestUntil = this.time + 10;
           this.emit('orb', { id: actor.id, x: orb.x, y: orb.y });
-          if (actor.human) this.grant(actor, 2, 2);
+          if (actor.human) this.grant(actor, 2, 1);
         }
       }
     }
