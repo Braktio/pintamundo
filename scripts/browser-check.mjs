@@ -93,6 +93,17 @@ try {
   await evaluate('document.getElementById("play").click()');
   assert.equal(await evaluate('document.getElementById("hud").hidden'), false);
   const key = (code, key, type = 'keyDown') => page('Input.dispatchKeyEvent', { type, code, key });
+  // Waits for Turbo to charge, circling inside the home zone (W, D, S, A) so nobody catches the pilot.
+  const waitCharged = async () => {
+    const turns = [['KeyW', 'w'], ['KeyD', 'd'], ['KeyS', 's'], ['KeyA', 'a']];
+    for (let i = 0; i < 40 && !await evaluate('/YA/.test(document.getElementById("slot-state-0").textContent)'); i++) {
+      const [code, letter] = turns[i % 4]; await key(code, letter); await sleep(280); await key(code, letter, 'keyUp');
+    }
+    assert.match(await evaluate('document.getElementById("slot-state-0").textContent'), /YA/, 'Turbo charges up');
+  };
+  // Powers start each match half charged: Turbo (16 s) is ready after about 8 s.
+  assert.doesNotMatch(await evaluate('document.getElementById("slot-state-0").textContent'), /YA/, 'powers start recharging');
+  await waitCharged();
   await key('Space', ' '); await key('Space', ' ', 'keyUp');
   await sleep(350);
   assert.match(await evaluate('document.getElementById("slot-state-0").textContent'), /ACTIVO/);
@@ -159,6 +170,7 @@ try {
   // The whole screen is an invisible joystick: any spot of the arena starts steering.
   assert.equal(await evaluate('Boolean(document.getElementById("joystick"))'), false, 'no on-screen joystick');
   assert.equal(await evaluate('Boolean(document.getElementById("danger"))'), false, 'no go-home warning');
+  await waitCharged();
   const stick = { x: 470, y: 160 };
   const touch = (x, y, id = 1) => ({ x, y, id, radiusX: 8, radiusY: 8, force: 1 });
   await page('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch(stick.x, stick.y)] });

@@ -7,25 +7,29 @@ export const COLORS = ['#2fa8ff', '#ff4f7b', '#5cc93b', '#ff9a1f', '#9b5cff', '#
 export const RARITIES = {
   comun: { name: 'Común', color: '#9fb3d9', cooldown: 1, refund: 20 },
   raro: { name: 'Raro', color: '#3fd0ff', cooldown: 1, refund: 40 },
-  epico: { name: 'Épico', color: '#b45cff', cooldown: .9, refund: 80 },
-  legendario: { name: 'Legendario', color: '#ffc21f', cooldown: .8, refund: 160 },
-  mitico: { name: 'Mítico', color: '#ff4f8b', cooldown: .65, refund: 320 }
+  epico: { name: 'Épico', color: '#b45cff', cooldown: .95, refund: 80 },
+  legendario: { name: 'Legendario', color: '#ffc21f', cooldown: .9, refund: 160 },
+  mitico: { name: 'Mítico', color: '#ff4f8b', cooldown: .85, refund: 320 }
 };
 export const RARITY_ORDER = Object.keys(RARITIES);
 // Duration 0 means the power acts instantly (a shot, a bomb, a freeze).
 export const POWERS = {
-  dash: { name: 'Turbo', icon: '🚀', duration: 3, cooldown: 10, description: '¡Corre mucho más rápido durante 3 segundos!' },
-  shield: { name: 'Burbuja', icon: '🛡️', duration: 1.5, cooldown: 16, description: 'Protege tu camino y hace rebotar a quien lo toque.' },
-  magnet: { name: 'Imán', icon: '🧲', duration: 4, cooldown: 14, description: 'Atrae las estrellas cercanas hacia ti.' },
-  ghost: { name: 'Fantasma', icon: '👻', duration: 3, cooldown: 16, description: 'Los robots no ven la parte nueva de tu camino.' },
-  shoot: { name: 'Disparo', icon: '🎯', duration: 0, cooldown: 8, description: 'Lanza una bola de pintura que pinta donde cae. Si toca el camino de un rival, ¡lo atrapa!' },
-  paint: { name: 'Rodillo', icon: '🖌️', duration: 3, cooldown: 18, description: 'Durante 3 segundos pintas tu zona por donde pasas, sin volver a casa.' },
-  bomb: { name: 'Bomba de color', icon: '💥', duration: 0, cooldown: 22, description: 'Pinta de golpe un gran círculo a tu alrededor.' },
-  freeze: { name: 'Congelar', icon: '❄️', duration: 0, cooldown: 20, description: 'Congela un momento a los rivales que estén cerca.' }
+  dash: { name: 'Turbo', icon: '🚀', duration: 3, cooldown: 16, description: '¡Corre mucho más rápido durante 3 segundos!' },
+  shield: { name: 'Burbuja', icon: '🛡️', duration: 1.5, cooldown: 20, description: 'Protege tu camino y hace rebotar a quien lo toque.' },
+  magnet: { name: 'Imán', icon: '🧲', duration: 4, cooldown: 18, description: 'Atrae las estrellas cercanas hacia ti.' },
+  ghost: { name: 'Fantasma', icon: '👻', duration: 3, cooldown: 22, description: 'Los robots no ven la parte nueva de tu camino.' },
+  shoot: { name: 'Disparo', icon: '🎯', duration: 0, cooldown: 18, description: 'Lanza una bola de pintura que pinta donde cae. Si toca el camino de un rival, ¡lo atrapa!' },
+  paint: { name: 'Rodillo', icon: '🖌️', duration: 2.5, cooldown: 26, description: 'Durante 2,5 segundos pintas tu zona por donde pasas, sin volver a casa.' },
+  bomb: { name: 'Bomba de color', icon: '💥', duration: 0, cooldown: 32, description: 'Pinta de golpe un gran círculo a tu alrededor.' },
+  freeze: { name: 'Congelar', icon: '❄️', duration: 0, cooldown: 30, description: 'Congela un momento a los rivales que estén cerca.' }
 };
-export const FREEZE_TIME = 1.6, SHOT_SPEED = 18, SHOT_LIFE = .8;
+export const FREEZE_TIME = 1.2, SHOT_SPEED = 18, SHOT_LIFE = .6;
 // Where a paint shot lands it paints a small disc, like a little Bomba de color.
-export const SHOT_PAINT = 2.2;
+export const SHOT_PAINT = 1.6;
+// Power sizes at character level 1 (character levels stretch them, see powerScale).
+export const DASH_SPEED = 1.45, BOMB_RADIUS = 3, FREEZE_RADIUS = 6, PAINT_BRUSH = 1.2, MAGNET_RADIUS = 10;
+// Powers start each match half charged.
+export const START_CHARGE = .5;
 // Solo: seconds before new robots appear once every robot is out, and how many.
 export const RESPAWN_DELAY = 2.5, RESPAWN_BOTS = 3;
 // Characters are drawn procedurally from `look`. Old ids (interceptor, tron, disc,
@@ -340,8 +344,8 @@ export function rollRarity(type, random = Math.random) {
 }
 // Character levels: rare, epic, legendary and mythic characters level up (1 → 10) with
 // repeats from chests. Going from level n to n+1 takes ceil(n / 2) repeats (25 in all),
-// and every level stretches the reach of the character's powers by 6%.
-export const CHARACTER_MAX_LEVEL = 10, POWER_STEP = .06;
+// and every level stretches the reach of the character's powers by 4%.
+export const CHARACTER_MAX_LEVEL = 10, POWER_STEP = .04;
 // While there are still new prizes of the rolled rarity, this share of chests gives a
 // repeat of an owned character that can still level up.
 export const REPEAT_CHANCE = .25;
@@ -412,7 +416,7 @@ export class Arena {
       // Robots play at level 1; a human's character level stretches its powers.
       reach: powerScale(id < humans.length ? humans[id].level : 1)
     }));
-    for (const actor of this.actors) { this.seed(actor); actor.best = actor.count; }
+    for (const actor of this.actors) { this.seed(actor); actor.best = actor.count; this.charge(actor); }
     for (let i = 0; i < 45; i++) this.spawnOrb();
   }
   // A weighted random character not in `taken`; easy mode only uses commons and rares.
@@ -449,10 +453,12 @@ export class Arena {
         x: spot.x + .5, y: spot.y + .5, angle, desired: angle, alive: true, trail: [], kills: 0, lastCell: cell(spot.x, spot.y),
         timers: {}, ready: {}, aiAt: 0, route: [], stunUntil: 0, frozenUntil: 0, harvestUntil: 0, wallSurge: false, reach: 1
       });
-      this.seed(actor); actor.best = actor.count;
+      this.seed(actor); actor.best = actor.count; this.charge(actor);
       this.emit('spawn', { id: actor.id, x: actor.x, y: actor.y });
     });
   }
+  // Powers start the match (or a respawn) half charged, so nobody fires in the first second.
+  charge(actor) { for (const power of actor.powers) actor.ready[power] = this.time + this.cooldown(actor, power) * START_CHARGE; }
   // Solo screens read the local player's best territory.
   get best() { return this.actors[0].best; }
   // A player who disconnects is handed over to the AI so the match stays fair.
@@ -501,9 +507,9 @@ export class Arena {
     actor.ready[skill] = this.time + this.cooldown(actor, skill);
     this.emit('ability', { id, skill, x: actor.x, y: actor.y });
     if (skill === 'shoot') this.projectiles.push({ owner: id, x: clamp(actor.x + Math.cos(actor.angle) * .9, .01, WIDTH - .01), y: clamp(actor.y + Math.sin(actor.angle) * .9, .01, HEIGHT - .01), angle: actor.angle, life: SHOT_LIFE * reach, paint: SHOT_PAINT * reach });
-    if (skill === 'bomb') this.splash(actor, cell(actor.x, actor.y), 3.6 * reach, 'bomb');
+    if (skill === 'bomb') this.splash(actor, cell(actor.x, actor.y), BOMB_RADIUS * reach, 'bomb');
     if (skill === 'freeze') {
-      for (const other of this.actors) if (other !== actor && other.alive && !this.active(other, 'shield') && Math.hypot(other.x - actor.x, other.y - actor.y) < 8 * reach) {
+      for (const other of this.actors) if (other !== actor && other.alive && !this.active(other, 'shield') && Math.hypot(other.x - actor.x, other.y - actor.y) < FREEZE_RADIUS * reach) {
         other.stunUntil = other.frozenUntil = this.time + FREEZE_TIME;
       }
       this.emit('freeze', { id, x: actor.x, y: actor.y });
@@ -613,7 +619,7 @@ export class Arena {
     if (!actor.alive || index === actor.lastCell) return;
     actor.lastCell = index;
     // Rodillo: paint a 3×3 brush directly instead of leaving an exposed trail.
-    if (this.active(actor, 'paint') && this.grid[index] !== actor.id) { this.splash(actor, index, 1.5 * (actor.reach || 1)); return; }
+    if (this.active(actor, 'paint') && this.grid[index] !== actor.id) { this.splash(actor, index, PAINT_BRUSH * (actor.reach || 1)); return; }
     // Self-crossings are harmless. Masks allow overlapping trails without erasing rivals.
     if (this.grid[index] === actor.id) { if (actor.trail.length) this.capture(actor); }
     else {
@@ -646,7 +652,7 @@ export class Arena {
     return Math.min(actor.x, actor.y, WIDTH - actor.x, HEIGHT - actor.y);
   }
   speed(actor) {
-    return (actor.id ? this.easy ? 3.4 : 4.2 : 4.8) * (this.active(actor, 'dash') ? 1.6 : 1) * (actor.wallSurge ? 1.35 : 1);
+    return (actor.id ? this.easy ? 3.4 : 4.2 : 4.8) * (this.active(actor, 'dash') ? DASH_SPEED : 1) * (actor.wallSurge ? 1.35 : 1);
   }
   spawnOrb() { this.orbRevision++; this.orbs.push({ x: 3 + this.random() * (WIDTH - 6), y: 3 + this.random() * (HEIGHT - 6), phase: this.random() * 6.28 }); }
   ai(actor) {
@@ -762,7 +768,7 @@ export class Arena {
       if (!actor.alive || this.ended) continue;
       for (let i = this.orbs.length - 1; i >= 0; i--) {
         const orb = this.orbs[i], distance = Math.hypot(orb.x - actor.x, orb.y - actor.y);
-        if (this.active(actor, 'magnet') && distance < 14 * (actor.reach || 1)) {
+        if (this.active(actor, 'magnet') && distance < MAGNET_RADIUS * (actor.reach || 1)) {
           const move = Math.min(distance, dt * 12);
           orb.x += (actor.x - orb.x) / (distance || 1) * move; this.orbRevision++;
           orb.y += (actor.y - orb.y) / (distance || 1) * move;

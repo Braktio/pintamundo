@@ -50,22 +50,24 @@ Hay 37 personajes dibujados por código (`CHARACTERS` en `engine.js`): 12 comune
 | --- | --- | --- |
 | Común | Ninguno | — |
 | Raro | 1 básico (Turbo, Burbuja o Imán) | ×1 |
-| Épico | 1 fuerte (Disparo, Fantasma o Rodillo) | ×0,9 |
-| Legendario | 2 | ×0,8 |
-| Mítico | 2, incluida Bomba o Congelar | ×0,65 |
+| Épico | 1 fuerte (Disparo, Fantasma o Rodillo) | ×0,95 |
+| Legendario | 2 | ×0,9 |
+| Mítico | 2, incluida Bomba o Congelar | ×0,85 |
+
+Valores con el personaje en nivel 1. Cada nivel de personaje aumenta un 4 % el alcance o la duración (+36 % en el nivel 10). Los poderes empiezan cada partida **a media carga** (`START_CHARGE`), así que nadie puede usarlos en el primer segundo.
 
 | Poder | Duración | Recarga base | Efecto |
 | --- | --- | --- | --- |
-| 🚀 Turbo | 3 s | 10 s | Velocidad ×1,6 |
-| 🛡️ Burbuja | 1,5 s | 16 s | Protege la estela y desvía al atacante |
-| 🧲 Imán | 4 s | 14 s | Atrae estrellas próximas |
-| 👻 Fantasma | 3 s | 16 s | Oculta a la IA la mitad reciente de la estela |
-| 🎯 Disparo | instantáneo | 8 s | Bola de pintura: donde cae pinta un círculo de radio 2,2 para su dueño (como una bomba pequeña); si cruza la estela expuesta de un rival, lo elimina; si toca su cuerpo, lo aturde 0,6 s. La Burbuja la bloquea |
-| 🖌️ Rodillo | 3 s | 18 s | Pinta un pincel de 3×3 por donde pasas, sin dejar estela; si tenías estela expuesta, se cierra |
-| 💥 Bomba de color | instantáneo | 22 s | Conquista un círculo de radio 3,6 alrededor y cierra la estela expuesta |
-| ❄️ Congelar | instantáneo | 20 s | Inmoviliza 1,6 s a los rivales a menos de 8 celdas (no a los que tienen Burbuja) |
+| 🚀 Turbo | 3 s | 16 s | Velocidad ×1,45 |
+| 🛡️ Burbuja | 1,5 s | 20 s | Protege la estela y desvía al atacante |
+| 🧲 Imán | 4 s | 18 s | Atrae estrellas a menos de 10 casillas |
+| 👻 Fantasma | 3 s | 22 s | Oculta a la IA la mitad reciente de la estela |
+| 🎯 Disparo | instantáneo | 18 s | Bola de pintura de unas 11 casillas de alcance: si cruza la estela expuesta de un rival, lo elimina; si toca su cuerpo, lo aturde 0,6 s; donde cae pinta un círculo de radio 1,6. La Burbuja la bloquea |
+| 🖌️ Rodillo | 2,5 s | 26 s | Pinta por donde pasas (pincel de radio 1,2) sin dejar estela; si tenías estela expuesta, se cierra |
+| 💥 Bomba de color | instantáneo | 32 s | Conquista un círculo de radio 3 alrededor y cierra la estela expuesta |
+| ❄️ Congelar | instantáneo | 30 s | Inmoviliza 1,2 s a los rivales a menos de 6 casillas (no a los que tienen Burbuja) |
 
-Los bots también reciben personajes al azar (los raros aparecen menos) y usan sus poderes. En modo fácil solo salen comunes y raros, y nunca disparan ni congelan. Turbo y Wall Surge se combinan: ×1,6 ×1,35 = ×2,16. Recoger una estrella da 4 Bits, 2 XP y un borde extra de una celda en los cierres durante 10 segundos.
+Los bots también reciben personajes al azar (los raros aparecen menos) y usan sus poderes. En modo fácil solo salen comunes y raros, y nunca disparan ni congelan. Turbo y Wall Surge se combinan: ×1,45 ×1,35 ≈ ×1,96. Recoger una estrella da 2 estrellas, 2 XP y un borde extra de una celda en los cierres durante 10 segundos.
 
 ## Niveles de personaje
 

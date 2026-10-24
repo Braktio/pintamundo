@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays, PROGRESS_EPOCH, fillChestBar, levelChest, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonStart, seasonReward, FIRST_SEASON, FREE_CHEST_HOURS } from '../engine.js';
+import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays, START_CHARGE, PROGRESS_EPOCH, fillChestBar, levelChest, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonStart, seasonReward, FIRST_SEASON, FREE_CHEST_HOURS } from '../engine.js';
 import { Renderer } from '../renderer.js';
 
 function clean(arena = new Arena()) {
   arena.grid.fill(-1); arena.trails.fill(-1); arena.events = [];
-  for (const actor of arena.actors) { actor.count = 0; actor.trail = []; }
+  // Power mechanics are tested fully charged (matches start them half charged).
+  for (const actor of arena.actors) { actor.count = 0; actor.trail = []; actor.ready = {}; }
   return arena;
 }
 function trail(arena, actor, points) {
@@ -166,23 +167,25 @@ test('common characters have no powers; others only use their own powers with du
   }
   const arena = new Arena(Object.assign(freshProfile(), { skins: ['tron'], skin: 'tron' }));
   assert.equal(arena.ability(0, 'shield'), false);
-  assert.equal(arena.ability(0, 'dash'), true);
+  assert.equal(arena.ability(0, 'dash'), false, 'powers start the match half charged');
+  arena.time = POWERS.dash.cooldown * START_CHARGE; assert.equal(arena.ability(0, 'dash'), true);
   assert.equal(arena.ability(0, 'dash'), false);
   assert.ok(arena.active(arena.actors[0], 'dash'));
-  arena.time = 3.1; assert.equal(arena.active(arena.actors[0], 'dash'), false);
-  arena.time = 10; assert.equal(arena.ability(0, 'dash'), true);
+  arena.time += 3.1; assert.equal(arena.active(arena.actors[0], 'dash'), false);
+  arena.time += POWERS.dash.cooldown; assert.equal(arena.ability(0, 'dash'), true);
   // Rarer characters recharge faster.
   const mythic = new Arena(Object.assign(freshProfile(), { skins: ['fenix'], skin: 'fenix' }));
   assert.ok(mythic.cooldown(mythic.actors[0], 'shoot') < POWERS.shoot.cooldown);
 });
 test('Rodillo paints cells directly while active and leaves no exposed trail', () => {
-  const arena = function () { const a = new Arena(Object.assign(freshProfile(), { skins: ['pintor'], skin: 'pintor' })); a.grid.fill(-1); for (const actor of a.actors) { actor.count = 0; actor.trail = []; } return a; }();
+  const arena = function () { const a = new Arena(Object.assign(freshProfile(), { skins: ['pintor'], skin: 'pintor' })); a.grid.fill(-1); for (const actor of a.actors) { actor.count = 0; actor.trail = []; actor.ready = {}; } return a; }();
   const actor = arena.actors[0];
   assert.ok(arena.ability(0, 'paint'));
   actor.lastCell = -1; arena.visit(actor, cell(20, 20));
   assert.equal(actor.trail.length, 0);
-  assert.equal(arena.grid[cell(20, 20)], 0); assert.equal(arena.grid[cell(21, 21)], 0);
-  assert.equal(actor.count, 9);
+  // A brush of radius 1.2: the cell and its four neighbours.
+  assert.equal(arena.grid[cell(20, 20)], 0); assert.equal(arena.grid[cell(21, 20)], 0); assert.equal(arena.grid[cell(21, 21)], -1);
+  assert.equal(actor.count, 5);
   ownershipInvariant(arena);
 });
 test('a paint shot that touches a rival trail catches the rival; a shield blocks it', () => {
@@ -208,7 +211,7 @@ test('Bomba claims a disc and closes an exposed trail; Congelar stuns nearby riv
   assert.ok(arena.ability(0, 'bomb'));
   assert.equal(actor.trail.length, 0);
   assert.equal(arena.grid[cell(15, 13)], 0);
-  assert.ok(arena.events.some(e => e.type === 'bomb' && e.cells > 30));
+  assert.ok(arena.events.some(e => e.type === 'bomb' && e.cells > 20), 'a radius-3 disc');
   ownershipInvariant(arena);
   const cold = withCharacter('yeti'), near = cold.actors[1], far = cold.actors[2];
   cold.actors[0].x = 20; cold.actors[0].y = 20; near.x = 23; near.y = 20; far.x = 60; far.y = 60;
@@ -264,7 +267,7 @@ test('rare and better characters level up with repeats, up to level 10', () => {
   // At the top level a repeat turns into stars again; commons never level up.
   assert.equal(characterLevel(profile, 'interceptor'), 1); assert.equal(levelsUp(CHARACTERS.find(c => c.id === 'interceptor')), false);
   // Each level stretches the reach of the powers by 6%.
-  assert.equal(powerScale(1), 1); assert.ok(Math.abs(powerScale(10) - 1.54) < 1e-9);
+  assert.equal(powerScale(1), 1); assert.ok(Math.abs(powerScale(10) - 1.36) < 1e-9);
   assert.deepEqual(parseProfile(JSON.stringify(profile)).copies, { abeja: 25 });
   assert.throws(() => parseProfile(JSON.stringify({ ...profile, copies: { interceptor: 2 } })), 'commons cannot have levels');
 });
@@ -352,7 +355,7 @@ test('a paint shot paints a small disc where it lands and still catches exposed 
   arena.moveShots(.1);
   const landed = cell(22, 20);
   assert.equal(arena.grid[landed], 0, 'the landing spot is painted');
-  assert.ok(arena.actors[0].count >= 13, 'a disc of radius 2.2 is about 15 cells');
+  assert.ok(arena.actors[0].count >= 9, 'a disc of radius 1.6 is about 9 cells');
   // Hitting a rival's exposed trail still catches it.
   const hunter = clean(), victim = hunter.actors[1];
   hunter.actors[0].x = 10.5; hunter.actors[0].y = 40.5;

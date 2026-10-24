@@ -1,7 +1,7 @@
 // Client side of online matches: talks to the server and mirrors its authoritative
 // arena. The local player is always remapped to actor 0, so the renderer and the
 // HUD work exactly as in solo games. Other players are smoothed between snapshots.
-import { characterFor, WIDTH, HEIGHT, clamp } from './engine.js';
+import { characterFor, WIDTH, HEIGHT, clamp, DASH_SPEED } from './engine.js';
 
 const FLAG_POWERS = ['dash', 'shield', 'ghost', 'paint', 'magnet'];
 const FROZEN = 32, WALL = 64, HUMAN = 128;
@@ -130,7 +130,7 @@ export class Mirror {
     if (!me.alive || !latest?.positions[0] || !Number.isFinite(desired)) { me.predicted = false; return false; }
     let [x, y, angle] = latest.positions[0];
     let left = me.frozenUntil ? 0 : Math.min(.35, (now - latest.at) / 1000 + rtt / 2000);
-    const speed = PLAYER_SPEED * (me.timers.dash ? 1.6 : 1) * (me.wallSurge ? 1.35 : 1);
+    const speed = PLAYER_SPEED * (me.timers.dash ? DASH_SPEED : 1) * (me.wallSurge ? 1.35 : 1);
     while (left > 0) {
       const dt = Math.min(left, 1 / 60), turn = Math.atan2(Math.sin(desired - angle), Math.cos(desired - angle));
       angle += clamp(turn, -TURN_RATE * dt, TURN_RATE * dt);
