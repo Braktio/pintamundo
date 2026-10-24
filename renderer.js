@@ -34,7 +34,9 @@ export class Renderer {
     addEventListener('resize', () => this.resize());
   }
   resize() {
-    this.width = innerWidth; this.height = innerHeight;
+    // A phone held upright gets the game turned 90° (orient() in game.js): sides swap.
+    const turned = document.body?.classList.contains('turned');
+    this.width = turned ? innerHeight : innerWidth; this.height = turned ? innerWidth : innerHeight;
     this.scale = CELL_PIXELS * Math.max(.75, Math.min(1.25, this.height / 470));
     this.dpr = Math.min(devicePixelRatio || 1, 1.5);
     this.canvas.width = Math.round(this.width * this.dpr);

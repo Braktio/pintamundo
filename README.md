@@ -18,10 +18,12 @@ También puedes abrir `index.html` con **Live Server** y usar la IP local y su p
 
 ## Control móvil
 
-- Usa el joystick izquierdo o arrastra sobre la arena para dirigir. La moto avanza continuamente y mantiene el rumbo al soltar.
+- Toda la pantalla es un **joystick invisible**: el punto donde apoyas el dedo es el centro y el personaje va hacia donde lo deslizas. Si el dedo se aleja más de 70 px, el centro lo sigue, así que dar la vuelta no exige un recorrido largo. Avanza solo y mantiene el rumbo al soltar.
 - El giro está limitado a **0,1 radianes por fotograma a 60 Hz**, equivalente a 6 rad/s. Se integra con un paso fijo de 90 Hz para conservar la misma velocidad angular entre dispositivos.
-- Los dos botones derechos activan las habilidades. Admiten un segundo dedo mientras mantienes el joystick.
-- **Ⅱ** pausa. Cambiar de pestaña o girar el móvil también pausa. En vertical aparece un aviso para girarlo a horizontal.
+- Los dos botones derechos activan las habilidades. Admiten un segundo dedo mientras diriges con el primero.
+- **Ⅱ** pausa. Cambiar de pestaña también pausa.
+- **Siempre en horizontal.** La APK está fijada en horizontal en su manifiesto, y Android lo respeta aunque la rotación automática esté apagada. En un navegador con el teléfono en vertical (Safari no deja bloquear la orientación), `orient()` de `game.js` gira todo el juego 90° y adapta las media queries y las unidades `vw`/`vh` (`--vw`, `--vh`). Nunca se pide girar el teléfono.
+- Sin aviso de «vuelve a casa»: el peligro se ve en la propia estela.
 - **⛶** solicita pantalla completa y bloqueo horizontal cuando el navegador lo permite. Safari en iPhone no lo admite: el botón explica cómo usar **Compartir → Añadir a pantalla de inicio**. Abierto desde ese icono (`manifest.webmanifest`, iconos en `icons/`), el juego ocupa toda la pantalla y el botón se oculta.
 - El teclado y el mouse se conservan como ayudas de desarrollo al probar en el PC; la interfaz de juego está diseñada para tocarse.
 
@@ -38,7 +40,7 @@ También puedes abrir `index.html` con **Live Server** y usar la IP local y su p
 
 La red tiene 84 × 72 celdas. Siete pilotos comienzan con bases separadas. Salir del territorio deja una estela; regresar cierra el trazado y conquista el área encerrada. Un flood fill desde los bordes distingue el interior del exterior. Las diagonales se conectan mediante DDA, evitando fugas geométricas.
 
-Hay seis bots con rutas de expansión y caza de estelas. Respetan escudos y la invisibilidad de Corte Rápido. Una baja transfiere al atacante el 25% del territorio rival, redondeado hacia abajo; el resto queda neutral. Conquistar **más del 50%** gana la partida y un cofre gratuito.
+Hay seis bots con rutas de expansión y caza de estelas. Respetan escudos y la invisibilidad de Corte Rápido. Una baja transfiere al atacante el 25% del territorio rival, redondeado hacia abajo; el resto queda neutral. En solitario, pintar **más del 50%** ya es una victoria (cofre épico), pero la partida sigue hasta pintar el **100%** o hasta que te atrapen. Cuando atrapas a todos los robots, a los 2,5 s aparecen hasta 3 nuevos en zonas sin pintar y lejos de ti; si no queda sitio libre, no vuelve nadie. En línea, más del 50% termina la partida.
 
 ## Personajes, rareza y poderes
 
@@ -58,7 +60,7 @@ Hay 37 personajes dibujados por código (`CHARACTERS` en `engine.js`): 12 comune
 | 🛡️ Burbuja | 1,5 s | 16 s | Protege la estela y desvía al atacante |
 | 🧲 Imán | 4 s | 14 s | Atrae estrellas próximas |
 | 👻 Fantasma | 3 s | 16 s | Oculta a la IA la mitad reciente de la estela |
-| 🎯 Disparo | instantáneo | 8 s | Bola de pintura: si cruza la estela expuesta de un rival, lo elimina; si toca su cuerpo, lo aturde 0,6 s. La Burbuja la bloquea |
+| 🎯 Disparo | instantáneo | 8 s | Bola de pintura: donde cae pinta un círculo de radio 2,2 para su dueño (como una bomba pequeña); si cruza la estela expuesta de un rival, lo elimina; si toca su cuerpo, lo aturde 0,6 s. La Burbuja la bloquea |
 | 🖌️ Rodillo | 3 s | 18 s | Pinta un pincel de 3×3 por donde pasas, sin dejar estela; si tenías estela expuesta, se cierra |
 | 💥 Bomba de color | instantáneo | 22 s | Conquista un círculo de radio 3,6 alrededor y cierra la estela expuesta |
 | ❄️ Congelar | instantáneo | 20 s | Inmoviliza 1,6 s a los rivales a menos de 8 celdas (no a los que tienen Burbuja) |
@@ -85,6 +87,18 @@ La clasificación muestra los tres líderes con nombres de piloto y puntuación 
 Cada punto porcentual conquistado entrega 18 Bits y 30 XP; cada baja, 120 Bits y 100 XP. Se guarda el progreso al obtenerlo y cada 10 segundos. La partida en curso no se restaura al recargar. El nivel sigue `1 + floor((XP / 200)^(1 / 1.45))`.
 
 Gato Rayo se regala en el nivel 2, Platillo Zum en el 5 y Dragoncito en el 10 (también pueden salir en cofres). El botón 🐢 del menú activa el **modo fácil**: los robots van más despacio, cazan desde más cerca y tu camino se dibuja más grueso. Los perfiles anteriores se migran solos: el antiguo contador de cofres pasa a cofres raros.
+
+## Rangos y ranking mundial
+
+Cada partida da o quita **copas 🏆** (`rankChange` en `engine.js`): −6 sin estrellas; +4, +10 o +18 con 1, 2 o 3 estrellas; +2 por cada rival atrapado (hasta 5); +20 por pintar todo el mapa. En línea, además, +8 al primero, +3 del 2.º al 3.º y −3 al último. Las copas nunca bajan de cero.
+
+Hay **10 rangos con 3 niveles cada uno** (30 en total): Bronce, Plata, Oro, Platino, Esmeralda, Rubí, Diamante, Maestro, Gran Maestro y Leyenda, del 1 al 3. Cada nivel empieza en `40·n + 4·n²` copas (Bronce 2 en 44, Plata 1 en 156, Leyenda 3 en 4.524), así que cada uno pide un poco más que el anterior. Los emblemas son escudos SVG dibujados por código, con corona a partir de Maestro.
+
+La pestaña **Rangos** muestra tu emblema, el avance al siguiente nivel, la escalera completa y el **ranking mundial**: los 50 jugadores con más copas. Para aparecer en él hay que entrar con Google. Cada jugador tiene una fila pública en Firestore, `ranking/{uid}` (nombre, copas y personaje), que se actualiza al terminar cada partida. Las reglas de `firestore.rules` dejan leerla a cualquiera y escribir solo la propia. Como las copas se calculan en el teléfono, alguien con conocimientos podría inflarlas; para evitarlo habría que calcularlas en el servidor.
+
+## Música
+
+`music.js` genera en tiempo real una pista cartoon de 16 compases a 124 BPM (melodía, acordes, bajo y percusión) con Web Audio. Suena en el menú y en las partidas cuando el sonido está activado; el botón de sonido controla a la vez la música y los efectos. El juego recuerda la elección; como los navegadores solo permiten sonar tras un toque, la música empieza con el primer toque. Se detiene al cambiar de pestaña o salir de la app.
 
 ## Perfil y guardado en la nube
 
@@ -153,7 +167,8 @@ El servidor público está en **https://pintamundo.onrender.com**, creado desde 
 
 - `engine.js`: conquista, colisiones de punta, superposición de estelas, IA, Wall Surge, habilidades y validación del perfil.
 - `renderer.js`: cámara ortográfica, motos cenitales sombreadas, plasma, glow, chispas y estelas rotas.
-- `game.js`: bucle, joystick multitáctil, HUD, audio, orientación, pantalla completa y persistencia.
+- `game.js`: bucle, joystick invisible multitáctil, HUD, audio, orientación siempre horizontal, pantalla completa, rangos y persistencia.
+- `music.js`: música de fondo generada con Web Audio.
 - `cloud.js`: inicio de sesión con Google y copia del perfil en Firestore (solo en la app).
 - `index.html` / `styles.css`: menú y HUD móvil horizontal.
 - `ui/`: iconos cartoon de la interfaz (pestañas, nivel, cofres, modo fácil, sonido, ayuda, inicio), recortados a 192×192 con fondo transparente. Para cambiar uno basta con reemplazar su PNG con el mismo nombre.

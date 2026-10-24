@@ -50,7 +50,7 @@ try {
   for (let i = 0; i < 30; i++) { if (await evaluate('document.querySelectorAll(".hangar-card").length') > 30) break; await sleep(150); }
   assert.deepEqual(errors, []);
   assert.ok(await evaluate('document.querySelectorAll(".hangar-card").length') > 30, 'collection lists every character');
-  await evaluate('document.getElementById("help").click()');
+  await evaluate('document.getElementById("help-side").click()');
   await page('Input.dispatchKeyEvent', { type: 'keyDown', code: 'Escape', key: 'Escape' });
   await page('Input.dispatchKeyEvent', { type: 'keyUp', code: 'Escape', key: 'Escape' });
   assert.equal(await evaluate('document.getElementById("dialog").open'), false, 'Escape closes help');
@@ -59,10 +59,14 @@ try {
   assert.equal(await until('[...document.querySelectorAll("img.ui-icon")].every(i => i.complete && i.naturalWidth > 0)'), true, 'every interface icon loads');
   const screenshot = async name => { const shot = await page('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }); await writeFile(new URL(name, root), Buffer.from(shot.data, 'base64')); };
   await screenshot('preview-menu.png');
-  for (const tab of ['collection', 'crates', 'progress']) {
+  assert.equal(await evaluate('Boolean(document.querySelector("#rank-tab-icon svg"))'), true, 'the Rangos tab shows the rank emblem');
+  for (const tab of ['collection', 'crates', 'progress', 'ranks']) {
     await evaluate(`document.querySelector('.tab[data-tab="${tab}"]').click()`); await sleep(350);
     await screenshot(`preview-${tab}.png`);
   }
+  await evaluate('document.querySelector("[data-ranks=ladder]").click()'); await sleep(200);
+  assert.equal(await evaluate('document.querySelectorAll(".ladder-tier").length'), 30, 'the ladder lists 10 ranks with 3 divisions');
+  await screenshot('preview-ranks-ladder.png');
   await evaluate(`document.querySelector('.tab[data-tab="crates"]').click()`);
   await evaluate('document.getElementById("play").click()');
   assert.equal(await evaluate(`document.querySelector('.screen[data-screen="home"]').hidden`), false, 'center button returns home');
@@ -118,41 +122,49 @@ try {
   await page('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 2 });
   await sleep(200);
   await screenshot('preview-mobile.png');
-  assert.equal(await evaluate('getComputedStyle(document.getElementById("rotate-prompt")).display'), 'none', 'the menu works in portrait; only matches ask to rotate');
+  // Held upright, the browser game turns itself to landscape instead of asking to rotate.
+  assert.equal(await evaluate('document.body.classList.contains("turned")'), true, 'portrait turns the game');
+  assert.equal(await evaluate('Boolean(document.getElementById("rotate-prompt"))'), false, 'there is no rotate prompt');
+  const turnedBox = await evaluate('(() => { const r = document.querySelector(".tabbar").getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()');
+  assert.ok(turnedBox.h > turnedBox.w, 'the tab bar runs down the side of the upright phone: ' + JSON.stringify(turnedBox));
   assert.ok(await evaluate('document.documentElement.scrollWidth <= 391'), 'mobile menu fits: ' + await evaluate('JSON.stringify({width:innerWidth,scroll:document.documentElement.scrollWidth,overflow:[...document.querySelectorAll("#menu *")].filter(e=>e.getBoundingClientRect().right>391).slice(0,8).map(e=>e.className)})'));
   await page('Emulation.setDeviceMetricsOverride', { width: 844, height: 390, deviceScaleFactor: 1, mobile: true });
   await sleep(200);
-  assert.equal(await evaluate('getComputedStyle(document.getElementById("rotate-prompt")).display'), 'none');
+  assert.equal(await evaluate('document.body.classList.contains("turned")'), false);
   await screenshot('preview-mobile-landscape-menu.png');
   await evaluate('document.getElementById("play").click()');
   assert.equal(await evaluate('document.getElementById("pilot-name").textContent'), 'Ana b');
   assert.match(await evaluate('document.getElementById("hud-territory").textContent'), /^\d+%$/);
   assert.match(await evaluate('document.getElementById("leaders").textContent'), /\d+%/);
-  const stick = await evaluate('(() => { const r=document.getElementById("joystick").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');
-  assert.equal(await evaluate('getComputedStyle(document.getElementById("joystick")).display'), 'block');
+  // The whole screen is an invisible joystick: any spot of the arena starts steering.
+  assert.equal(await evaluate('Boolean(document.getElementById("joystick"))'), false, 'no on-screen joystick');
+  assert.equal(await evaluate('Boolean(document.getElementById("danger"))'), false, 'no go-home warning');
+  const stick = { x: 470, y: 160 };
   const touch = (x, y, id = 1) => ({ x, y, id, radiusX: 8, radiusY: 8, force: 1 });
   await page('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch(stick.x, stick.y)] });
   await page('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [touch(stick.x+35, stick.y)] });
   await sleep(250);
-  assert.equal(await evaluate('document.getElementById("joystick").classList.contains("engaged")'), true);
+  assert.equal(await evaluate('document.body.classList.contains("steering")'), true, 'a touch anywhere steers');
   const skill = await evaluate('(() => { const r=document.getElementById("slot-0").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');
   await page('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch(stick.x+35, stick.y), touch(skill.x, skill.y, 2)] });
   await page('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [touch(stick.x+35, stick.y)] });
   await sleep(180);
   assert.match(await evaluate('document.getElementById("slot-state-0").textContent'), /ACTIVO/, 'second thumb triggers dash while steering');
   await page('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  assert.equal(await evaluate('document.getElementById("joystick").classList.contains("engaged")'), false);
+  assert.equal(await evaluate('document.body.classList.contains("steering")'), false, 'lifting the finger stops steering');
   await screenshot('preview-mobile-arena.png');
-  const mobileBounds = await evaluate('(() => {const ids=["joystick","slot-0","slot-1","pause"].filter(id=>!document.getElementById(id).hidden); return ids.map(id=>{const r=document.getElementById(id).getBoundingClientRect();return {id,x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};});})()');
+  const mobileBounds = await evaluate('(() => {const ids=["slot-0","slot-1","pause"].filter(id=>!document.getElementById(id).hidden); return ids.map(id=>{const r=document.getElementById(id).getBoundingClientRect();return {id,x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};});})()');
   assert.ok(mobileBounds.every(r => r.x >= 0 && r.y >= 0 && r.right <= 844 && r.bottom <= 390 && r.width >= 44 && r.height >= 44), 'touch controls stay inside safe landscape bounds: ' + JSON.stringify(mobileBounds));
   assert.ok(mobileBounds.some(r => r.id === 'slot-0'), 'the rare character shows its power button');
+  const map = await evaluate('(() => { const r = document.querySelector(".map-panel").getBoundingClientRect(); return { w: r.width, right: r.right, bottom: r.bottom }; })()');
+  assert.ok(map.w > 40 && map.right <= 844 && map.bottom <= 390, 'the minimap shows on a phone: ' + JSON.stringify(map));
   await evaluate('document.getElementById("pause").click()');
   await evaluate('document.getElementById("resume").click()');
   await page('Emulation.setDeviceMetricsOverride', { width: 844, height: 390, deviceScaleFactor: 1, mobile: true });
   await sleep(200);
   await screenshot('preview-mobile-landscape.png');
   assert.deepEqual(errors, [], 'desktop and mobile have no runtime errors');
-  console.log('Browser OK: kid-friendly HUD, two-thumb joystick + dash, 44px touch targets, capture/rewards/crates and portrait rotation prompt.');
+  console.log('Browser OK: HUD, whole-screen touch steering + power with a second finger, minimap on phones, 44px touch targets, capture/rewards/crates, ranks and always-landscape layout.');
   await send('Browser.close');
 } finally {
   socket?.close();

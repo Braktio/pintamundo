@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest } from '../engine.js';
+import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange } from '../engine.js';
 import { Renderer } from '../renderer.js';
 
 function clean(arena = new Arena()) {
@@ -228,12 +228,75 @@ test('chests roll their rarity table, prefer new prizes and refund repeats with 
   const before = profile.bits, repeat = openChest(profile, 'comun', () => 0);
   assert.ok(repeat.duplicate); assert.equal(profile.bits - before, RARITIES.comun.refund);
 });
-test('victory requires strictly more than half of the map', () => {
+test('solo: more than half is a victory, but the match only ends at 100% or when caught', () => {
   const arena = clean();
   for (let i = 0; i < SIZE / 2; i++) arena.assign(i, 0);
   arena.checkWin(); assert.equal(arena.won, false);
   arena.assign(SIZE / 2, 0); arena.checkWin();
-  assert.ok(arena.won); assert.ok(arena.events.some(e => e.type === 'end' && e.won));
+  assert.ok(arena.won); assert.ok(arena.events.some(e => e.type === 'victory'));
+  assert.equal(arena.ended, false, 'the match goes on after the victory');
+  // Caught after winning: the victory still counts.
+  arena.kill(arena.actors[0], arena.actors[1]);
+  assert.ok(arena.ended); assert.ok(arena.events.some(e => e.type === 'end' && e.won));
+  const full = clean();
+  for (let i = 0; i < SIZE; i++) full.assign(i, 0);
+  full.checkWin();
+  assert.ok(full.events.some(e => e.type === 'end' && e.won && /todo el mapa/.test(e.reason)));
+});
+test('online: more than half of the map ends the match', () => {
+  const arena = new Arena(freshProfile(), Math.random, { humans: [{ skin: 'tron', color: COLORS[0], name: 'Ana' }] });
+  for (let i = 0; i <= SIZE / 2; i++) arena.assign(i, 0);
+  arena.checkWin();
+  assert.ok(arena.ended && arena.won);
+});
+test('a paint shot paints a small disc where it lands and still catches exposed trails', () => {
+  const arena = clean(), shooter = arena.actors[0];
+  shooter.x = 20.5; shooter.y = 20.5; shooter.angle = 0;
+  arena.projectiles.push({ owner: 0, x: 21, y: 20.5, angle: 0, life: .05 });
+  arena.moveShots(.1);
+  const landed = cell(22, 20);
+  assert.equal(arena.grid[landed], 0, 'the landing spot is painted');
+  assert.ok(arena.actors[0].count >= 13, 'a disc of radius 2.2 is about 15 cells');
+  // Hitting a rival's exposed trail still catches it.
+  const hunter = clean(), victim = hunter.actors[1];
+  hunter.actors[0].x = 10.5; hunter.actors[0].y = 40.5;
+  trail(hunter, victim, [[14, 40], [15, 40]]);
+  hunter.projectiles.push({ owner: 0, x: 11, y: 40.5, angle: 0, life: .8 });
+  for (let i = 0; i < 20 && hunter.projectiles.length; i++) hunter.moveShots(1 / 60);
+  assert.equal(victim.alive, false);
+  assert.equal(hunter.grid[cell(15, 40)], 0, 'the shot also paints where it hit');
+});
+test('solo: when every robot is out, a few new ones appear in free space', () => {
+  const arena = clean();
+  for (const bot of arena.actors.slice(1)) arena.kill(bot, arena.actors[0]);
+  assert.equal(arena.actors.filter(a => a.id && a.alive).length, 0);
+  assert.ok(arena.respawnAt > arena.time);
+  arena.time = arena.respawnAt; arena.respawnAt = 0; arena.respawn();
+  const back = arena.actors.filter(a => a.id && a.alive);
+  assert.ok(back.length >= 1 && back.length <= 3, 'only a few robots come back: ' + back.length);
+  for (const bot of back) {
+    assert.ok(bot.count > 0, 'each one starts with a small base');
+    assert.ok(Math.hypot(bot.x - arena.actors[0].x, bot.y - arena.actors[0].y) >= 12, 'away from the player');
+  }
+  assert.equal(arena.events.filter(e => e.type === 'spawn').length, back.length);
+  // A map with no free space brings nobody back.
+  const full = clean();
+  for (const bot of full.actors.slice(1)) full.kill(bot, full.actors[0]);
+  for (let i = 0; i < SIZE; i++) if (full.grid[i] === -1) full.assign(i, 0);
+  full.respawn();
+  assert.equal(full.actors.filter(a => a.id && a.alive).length, 0);
+});
+test('ranks: 10 ranks with 3 divisions, trophies per match never below zero', () => {
+  assert.equal(RANKS.length, 10); assert.equal(TIERS, 30);
+  assert.deepEqual([rankFor(0).name, rankFor(tierStart(1)).name, rankFor(tierStart(2)).name, rankFor(tierStart(3)).name], ['Bronce 1', 'Bronce 2', 'Bronce 3', 'Plata 1']);
+  assert.equal(rankFor(tierStart(29)).name, 'Leyenda 3'); assert.equal(rankFor(1e6).next, null);
+  for (let t = 1; t < TIERS; t++) assert.ok(tierStart(t) - tierStart(t - 1) >= tierStart(t - 1) - (t > 1 ? tierStart(t - 2) : 0), 'each tier needs at least as many trophies as the last');
+  assert.ok(rankChange({ stars: 0 }) < 0); assert.ok(rankChange({ stars: 3, kills: 2 }) > rankChange({ stars: 1 }));
+  assert.equal(rankChange({ stars: 3, perfect: true }) - rankChange({ stars: 3 }), 20);
+  assert.equal(rankChange({ stars: 1, place: 1, players: 7 }) - rankChange({ stars: 1 }), 8);
+  const profile = Object.assign(freshProfile(), { points: 321 });
+  assert.equal(parseProfile(JSON.stringify(profile)).points, 321);
+  assert.throws(() => parseProfile(JSON.stringify({ ...profile, points: -5 })));
 });
 test('orb amplification adds a border only while the temporary bonus is active', () => {
   const capture = active => {

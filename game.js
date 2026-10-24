@@ -1,9 +1,38 @@
-import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
+import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, rankChange, tierStart, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
 import { Renderer, shade } from './renderer.js';
 import { Connection, Mirror, defaultServer, rememberServer, normalizeServer } from './online.js';
 import * as cloud from './cloud.js';
+import { music } from './music.js';
 
 const $ = id => document.getElementById(id);
+const root = document.documentElement;
+// ---------- Always landscape ----------
+// The Android app is locked to landscape by its manifest, whatever the rotation setting.
+// A browser held upright (Safari cannot lock the orientation) gets the whole game turned
+// 90°, so it never asks to rotate the phone. Media queries are rewritten to describe the
+// turned screen, and --vw/--vh replace the viewport units in the stylesheet.
+const nativeApp = !!globalThis.Capacitor?.isNativePlatform?.();
+let turned = false;
+const mediaRules = [...document.styleSheets].flatMap(sheet => { try { return [...sheet.cssRules]; } catch { return []; } })
+  .filter(rule => rule instanceof CSSMediaRule).map(rule => ({ rule, text: rule.media.mediaText }));
+const swapAxes = text => text.replace(/landscape|portrait|width|height/g, word => ({ landscape: 'portrait', portrait: 'landscape', width: 'height', height: 'width' })[word]);
+function orient() {
+  const next = !nativeApp && innerHeight > innerWidth;
+  if (next) {
+    root.style.setProperty('--vw', innerHeight / 100 + 'px'); root.style.setProperty('--vh', innerWidth / 100 + 'px');
+    root.style.setProperty('--real-w', innerWidth + 'px');
+  } else for (const name of ['--vw', '--vh', '--real-w']) root.style.removeProperty(name);
+  if (next === turned) return;
+  turned = next; document.body.classList.toggle('turned', turned);
+  for (const { rule, text } of mediaRules) rule.media.mediaText = turned ? swapAxes(text) : text;
+  resetSteer();
+}
+// Screen coordinates of a pointer event, as seen by the (possibly turned) game.
+const toGame = event => turned ? { x: event.clientY, y: innerWidth - event.clientX } : { x: event.clientX, y: event.clientY };
+addEventListener('resize', orient);
+// Touch steering: the finger that steers, where it landed and how far it slid from there.
+const touchSteer = { id: null, x: 0, y: 0, dx: 0, dy: 0 };
+function resetSteer() { touchSteer.id = null; touchSteer.dx = touchSteer.dy = 0; document.body.classList.remove('steering'); }
 const SAVE_KEY = 'neon-frontier.profile.v1';
 let profile = freshProfile();
 let storageError = false;
@@ -14,6 +43,7 @@ const contentOf = ({ updatedAt, ...rest }) => JSON.stringify(rest);
 let savedContent = contentOf(profile);
 // Signed-in account ({ uid, name, provider }) and the state of the pending cloud upload.
 let account = null, cloudDirty = false, cloudTimer = 0, cloudBusy = false;
+orient();
 const renderer = new Renderer($('arena'));
 let arena = new Arena(profile), state = 'menu', hangarTab = 'skins';
 // Online session: { connection, private, lobby }. `mirror` is set only while an online match runs.
@@ -21,28 +51,16 @@ let online = null, mirror = null;
 let lastFrame = performance.now(), accumulator = 0, hudClock = 0, generation = 0;
 let aim = null, keys = new Set(), sound = false, audio = null;
 let announcedUntil = 0;
-const touchSteer = { id: null, x: 0, y: 0 };
 const number = value => Math.floor(value).toLocaleString('es-CO');
-function resetJoystick() {
-  touchSteer.id = null; touchSteer.x = touchSteer.y = 0;
-  $('joystick-knob').style.transform = 'translate(-50%, -50%)';
-  $('joystick').classList.remove('engaged');
-}
-function mobileUI() {
-  if (innerHeight > innerWidth && state === 'playing') pause();
-}
-mobileUI();
-addEventListener('resize', mobileUI);
-addEventListener('orientationchange', () => { resetJoystick(); pause(); });
 // Safari on iPad only has the prefixed API; Safari on iPhone has none at all.
-const root = document.documentElement;
 const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement;
 const canFullscreen = !!(root.requestFullscreen || root.webkitRequestFullscreen);
 async function enterFullscreen() {
   try {
     if (!fullscreenElement()) await (root.requestFullscreen ? root.requestFullscreen() : root.webkitRequestFullscreen());
-    if (fullscreenElement() && screen.orientation?.lock) await screen.orientation.lock('landscape');
-  } catch { /* The landscape prompt covers browsers that do not support orientation lock. */ }
+    // `screen` is the menu screen name in this module; the browser's one is on globalThis.
+    if (fullscreenElement() && globalThis.screen.orientation?.lock) await globalThis.screen.orientation.lock('landscape');
+  } catch { /* Without the lock, a phone held upright simply gets the game turned. */ }
 }
 // Inside the Android app, or opened from the home screen, the game is already full screen.
 const standalone = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone === true;
@@ -76,11 +94,11 @@ const SOUNDS = {
   wall: [[150, 450, 0, .18, 'triangle']],
   level: [[523, 523, 0, .1, 'square'], [659, 659, .1, .1, 'square'], [784, 784, .2, .1, 'square'], [1047, 1047, .3, .1, 'square'], [1319, 1319, .4, .35, 'square']]
 };
+const audioContext = () => (audio ??= new (window.AudioContext || window.webkitAudioContext)());
 function tone(kind = 'capture') {
   if (!sound) return;
   try {
-    audio ??= new (window.AudioContext || window.webkitAudioContext)();
-    void audio.resume();
+    audioContext(); void audio.resume();
     for (const [from, to, delay, length, wave] of SOUNDS[kind] || SOUNDS.capture) {
       const oscillator = audio.createOscillator(), gain = audio.createGain(), start = audio.currentTime + delay;
       oscillator.type = wave; oscillator.frequency.setValueAtTime(from, start); oscillator.frequency.exponentialRampToValueAtTime(to, start + length);
@@ -89,11 +107,23 @@ function tone(kind = 'capture') {
     }
   } catch { sound = false; }
 }
-$('sound').onclick = () => {
-  sound = !sound; $('sound').setAttribute('aria-pressed', String(sound));
+// The sound button turns on both the effects and the background music (music.js). The
+// choice is remembered; browsers only allow audio after a tap, so a remembered "on"
+// starts the music with the first touch.
+const SOUND_KEY = 'pintamundo.sound';
+function setSound(on) {
+  sound = on; $('sound').setAttribute('aria-pressed', String(sound));
   $('sound').setAttribute('aria-label', sound ? 'Desactivar sonido' : 'Activar sonido');
-  tone('orb');
-};
+  try { localStorage.setItem(SOUND_KEY, sound ? '1' : '0'); } catch { /* Not critical. */ }
+  playMusic();
+}
+function playMusic() {
+  try { if (sound && !document.hidden) music.start(audioContext()); else music.stop(); } catch { /* No Web Audio. */ }
+}
+$('sound').onclick = () => { setSound(!sound); tone('orb'); };
+try { if (localStorage.getItem(SOUND_KEY) === '1') { sound = true; $('sound').setAttribute('aria-pressed', 'true'); $('sound').setAttribute('aria-label', 'Desactivar sonido'); } } catch { /* Starts muted. */ }
+addEventListener('pointerdown', () => { if (sound && !music.isPlaying) playMusic(); });
+document.addEventListener('visibilitychange', playMusic);
 function renderEasy() {
   $('easy').setAttribute('aria-pressed', String(profile.easy === true));
   $('easy').title = profile.easy ? 'Modo fácil activado' : 'Modo fácil';
@@ -104,7 +134,7 @@ $('easy').onclick = () => {
   toast(profile.easy ? '🐢 Modo fácil: los robots van más despacio.' : '🐇 Modo normal: ¡los robots vuelven a correr!');
 };
 function dialog(html) {
-  keys.clear(); resetJoystick(); $('dialog-content').innerHTML = html;
+  keys.clear(); resetSteer(); $('dialog-content').innerHTML = html;
   if (!$('dialog').open) $('dialog').showModal();
 }
 function announce(text) {
@@ -344,7 +374,7 @@ function renderMenu() {
   $('stat-best').textContent = Math.round(profile.best) + '%';
   const current = characterFor(profile.skin);
   $('home-character').innerHTML = `${rarityChip(current.rarity)} <b>${current.name}</b> <span class="home-powers">${powerIcons(current.powers)}</span>`;
-  renderEasy(); renderChests(); renderHangar(); renderAccount();
+  renderEasy(); renderChests(); renderHangar(); renderAccount(); renderRanks();
 }
 let screen = 'home';
 function showScreen(name) {
@@ -357,6 +387,7 @@ function showScreen(name) {
   $('play').setAttribute('aria-label', name === 'home' ? '¡A jugar!' : 'Volver al inicio');
   document.querySelector('.screens').scrollTop = 0;
   renderMenu();
+  if (name === 'ranks') void loadLeaderboard();
 }
 document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () => showScreen(button.dataset.tab));
 $('hangar-items').onclick = event => {
@@ -430,7 +461,7 @@ setInterval(() => { if (state === 'menu') renderFreeChest(); }, 30000);
 
 function start() {
   disconnect();
-  generation++; arena = new Arena(profile); mirror = null; state = 'playing'; accumulator = 0; aim = null; keys.clear(); resetJoystick();
+  generation++; arena = new Arena(profile); mirror = null; state = 'playing'; accumulator = 0; aim = null; keys.clear(); resetSteer();
   enterMatch(); announce('¡A PINTAR! 🎨'); renderHUD();
 }
 // Shared by solo and online matches: reset effects and build the HUD for the current arena.
@@ -447,6 +478,10 @@ function enterMatch() {
   $('pilot-name').textContent = profile.name || 'Tú';
   $('leaders').innerHTML = arena.actors.map(actor => `<li data-actor="${actor.id}" class="${actor.id ? '' : 'me'}" style="--actor:${actor.color}"><img src="${renderer.portraitURL(actor)}" alt="${actor.name}"><i></i><b>0%</b></li>`).join('');
   $('timer-pill').hidden = !mirror;
+  // Solo matches go on to 100% (half is already a victory); online ones end at half.
+  goal = mirror ? 50 : 100;
+  $('goal-bar').setAttribute('aria-label', mirror ? 'Meta: pintar la mitad del mapa' : 'Meta: pintar todo el mapa');
+  document.querySelectorAll('[data-milestone]').forEach((el, i) => { el.dataset.milestone = goal * (i + 1) / 5; el.classList.remove('reached'); });
   stopSpectating();
 }
 // ---------- Spectator mode (online only) ----------
@@ -477,7 +512,7 @@ $('spectate-next').onclick = () => cycleSpectate(1);
 $('play').onclick = () => { if (screen === 'home') start(); else showScreen('home'); };
 function menu() {
   disconnect(); stopSpectating();
-  generation++; state = 'menu'; keys.clear(); aim = null; resetJoystick();
+  generation++; state = 'menu'; keys.clear(); aim = null; resetSteer();
   $('dialog').close(); $('menu').hidden = false; $('hud').hidden = true;
   document.body.classList.remove('in-match');
   arena = new Arena(profile); renderMenu(); save(true);
@@ -485,21 +520,27 @@ function menu() {
 function end(won, reason, ranking = null) {
   if (state !== 'playing' && state !== 'paused') return;
   state = 'ending'; keys.clear();
-  resetJoystick(); renderHUD();
-  const player = arena.actors[0], percent = arena.best / SIZE * 100;
+  resetSteer(); renderHUD();
+  // A solo victory (half the map) counts even if the player was caught or quit afterwards.
+  won = won || (!mirror && arena.won);
+  const player = arena.actors[0], percent = arena.best / SIZE * 100, perfect = arena.best >= SIZE;
   profile.best = Math.max(profile.best, percent);
   // Match reward: 1 star → common chest, 2 stars → rare chest, a win → epic chest.
   const stars = won ? 3 : percent >= 20 ? 2 : percent >= 6 || player.kills ? 1 : 0;
   const prizeChest = [null, 'comun', 'raro', 'epico'][stars];
   if (won) profile.wins++;
   if (prizeChest) { profile.chests[prizeChest]++; matchChests.push({ type: prizeChest, reason: won ? '¡Victoria!' : '⭐'.repeat(stars) }); }
-  save(true);
+  // Trophies for the ranked ladder; online, the final place counts too.
+  const before = rankFor(profile.points), change = rankChange({ stars, kills: player.kills, perfect, place: mirror && ranking ? ranking.indexOf(0) + 1 : 0, players: mirror && ranking ? ranking.length : 0 });
+  profile.points = Math.max(0, profile.points + change);
+  const after = rankFor(profile.points);
+  save(true); publishRank();
   const currentGeneration = generation;
   setTimeout(() => {
     if (currentGeneration !== generation) return;
     state = 'results';
     const earned = matchChests.splice(0);
-    const title = won ? '¡GANASTE! 🏆' : stars >= 2 ? '¡Muy bien!' : stars ? '¡Buen intento!' : '¡Casi lo tienes!';
+    const title = perfect ? '¡MAPA COMPLETO! 🌍' : won ? '¡GANASTE! 🏆' : stars >= 2 ? '¡Muy bien!' : stars ? '¡Buen intento!' : '¡Casi lo tienes!';
     const chests = earned.length ? `<div class="earned-chests">${earned.map(c => `<div class="prize-chest chest-${c.type}">${chestSVG(c.type, 56)}<b>${CHESTS[c.type].name}</b><small>${c.reason}</small></div>`).join('')}</div>` : '<p>Pinta un poco más para ganar un cofre 🎁</p>';
     const actions = `<div class="dialog-buttons"><button class="dialog-button" id="retry">${!online ? '¡OTRA VEZ! ▶' : online.private ? '👫 Volver a la sala' : '¡OTRA PARTIDA! ▶'}</button><button class="dialog-button secondary" id="to-menu">🏠 Menú</button></div>`;
     const wire = () => {
@@ -507,7 +548,7 @@ function end(won, reason, ranking = null) {
       $('to-menu').onclick = menu;
     };
     const opener = `<div class="dialog-buttons"><button class="dialog-button" id="open-earned">🎁 ¡ABRIR ${earned.length > 1 ? earned.length + ' COFRES' : 'COFRE'}!</button></div>`;
-    dialog(`<p class="eyebrow">${won ? '¡Pintaste más de la mitad!' : 'Fin de la partida'}</p><div class="result-stars" aria-label="${stars} de 3 estrellas">${[0, 1, 2].map(i => `<span class="${i < stars ? '' : 'off'}">⭐</span>`).join('')}</div><h2>${title}</h2><p>${won ? '¡El mapa es de tu color!' : reason}</p><div class="results"><div><strong>${Math.round(percent)}%</strong><small>🎨 Pintado</small></div><div><strong>${player.kills}</strong><small>🎯 Atrapados</small></div><div><strong>+${number(arena.bits)}</strong><small>⭐ Estrellas</small></div></div><p>+${number(arena.xp)} XP · Nivel ${levelFor(profile.xp)}</p>${chests}${earned.length ? opener : actions}`);
+    dialog(`<p class="eyebrow">${perfect ? '¡Pintaste todo el mapa!' : won ? '¡Pintaste más de la mitad!' : 'Fin de la partida'}</p><div class="result-stars" aria-label="${stars} de 3 estrellas">${[0, 1, 2].map(i => `<span class="${i < stars ? '' : 'off'}">⭐</span>`).join('')}</div><h2>${title}</h2><p>${perfect ? '¡Todo el mapa es de tu color!' : won ? '¡Más de la mitad del mapa es de tu color! ' + reason : reason}</p><div class="results"><div><strong>${Math.round(percent)}%</strong><small>🎨 Pintado</small></div><div><strong>${player.kills}</strong><small>🎯 Atrapados</small></div><div><strong>+${number(arena.bits)}</strong><small>⭐ Estrellas</small></div></div><p>+${number(arena.xp)} XP · Nivel ${levelFor(profile.xp)}</p>${rankResult(before, after, change)}${chests}${earned.length ? opener : actions}`);
     tone(won ? 'level' : stars ? 'capture' : 'death');
     if (ranking) $('dialog-content').querySelector('h2').insertAdjacentHTML('afterend', `<p class="ranking-place">🏅 Quedaste en el puesto ${ranking.indexOf(0) + 1} de ${ranking.length}</p>`);
     if (!earned.length) { wire(); return; }
@@ -567,44 +608,40 @@ document.addEventListener('keydown', event => {
   if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) { event.preventDefault(); keys.add(event.code); aim = null; }
 });
 document.addEventListener('keyup', event => keys.delete(event.code));
-function pointer(event) {
-  if (state !== 'playing') return;
-  aim = { x: event.clientX, y: event.clientY };
-}
-$('arena').addEventListener('pointermove', pointer);
-$('arena').addEventListener('pointerdown', event => {
-  pointer(event); $('arena').setPointerCapture(event.pointerId);
+// The mouse points where to go (a help for testing on a PC).
+$('arena').addEventListener('pointermove', event => { if (state === 'playing' && event.pointerType === 'mouse') aim = toGame(event); });
+$('arena').addEventListener('pointerdown', event => { if (state === 'playing' && event.pointerType === 'mouse') aim = toGame(event); });
+// Touch: the whole screen is an invisible joystick. Each touch takes the spot where the
+// finger lands as its centre and steers towards where it slides. If the finger goes far,
+// the centre follows it, so turning back never needs a long slide. Buttons keep working
+// with a second finger.
+const STEER_DEAD = 12, STEER_REACH = 70;
+addEventListener('pointerdown', event => {
+  if (event.pointerType === 'mouse' || state !== 'playing' || touchSteer.id !== null) return;
+  if (event.target.closest('button, dialog, input, a')) return;
+  const at = toGame(event);
+  Object.assign(touchSteer, { id: event.pointerId, x: at.x, y: at.y, dx: 0, dy: 0 }); aim = null;
+  document.body.classList.add('steering');
 });
-function updateJoystick(event) {
-  const bounds = $('joystick').getBoundingClientRect();
-  const radius = bounds.width * .34;
-  const dx = event.clientX - bounds.left - bounds.width / 2;
-  const dy = event.clientY - bounds.top - bounds.height / 2;
-  const distance = Math.hypot(dx, dy), factor = Math.min(1, radius / (distance || 1));
-  touchSteer.x = dx * factor / radius; touchSteer.y = dy * factor / radius;
-  $('joystick-knob').style.transform = `translate(calc(-50% + ${dx * factor}px), calc(-50% + ${dy * factor}px))`;
-}
-$('joystick').addEventListener('pointerdown', event => {
-  if (state !== 'playing' || touchSteer.id !== null) return;
-  event.preventDefault();
-  touchSteer.id = event.pointerId; aim = null;
-  $('joystick').setPointerCapture(event.pointerId);
-  $('joystick').classList.add('engaged'); updateJoystick(event);
-});
-$('joystick').addEventListener('pointermove', event => {
+addEventListener('pointermove', event => {
   if (event.pointerId !== touchSteer.id) return;
-  event.preventDefault(); updateJoystick(event);
+  const at = toGame(event);
+  let dx = at.x - touchSteer.x, dy = at.y - touchSteer.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance > STEER_REACH) {
+    touchSteer.x += dx * (1 - STEER_REACH / distance); touchSteer.y += dy * (1 - STEER_REACH / distance);
+    dx = at.x - touchSteer.x; dy = at.y - touchSteer.y;
+  }
+  touchSteer.dx = dx; touchSteer.dy = dy;
 });
-for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-  $('joystick').addEventListener(type, event => { if (event.pointerId === touchSteer.id) resetJoystick(); });
-}
+for (const type of ['pointerup', 'pointercancel']) addEventListener(type, event => { if (event.pointerId === touchSteer.id) resetSteer(); });
 function steer() {
   const player = arena.actors[0];
   arena.wallRange = 40 / renderer.scale;
-  if (touchSteer.id !== null && Math.hypot(touchSteer.x, touchSteer.y) > .16) {
-    // Invert the projected direction so the stick follows the screen, not grid axes.
+  if (touchSteer.id !== null && Math.hypot(touchSteer.dx, touchSteer.dy) > STEER_DEAD) {
+    // The projected direction is inverted so steering follows the screen, not grid axes.
     const head = renderer.project(player.x, player.y);
-    const target = renderer.unproject(head.x + touchSteer.x * 80, head.y + touchSteer.y * 80);
+    const target = renderer.unproject(head.x + touchSteer.dx, head.y + touchSteer.dy);
     player.desired = Math.atan2(target.y - player.y, target.x - player.x);
     return;
   }
@@ -642,21 +679,27 @@ function processEvents() {
     if (event.type === 'ability' && event.id === 0) tone('ability');
     if (event.type === 'orb' && event.id === 0) tone('orb');
     if (event.type === 'out' && event.id === 0) { announce('¡Te atraparon! 👀'); toast('Ahora miras la partida. Cambia de jugador con ◀ ▶.'); spectate(arena.lastKiller ?? -1); }
+    if (event.type === 'victory' && event.id === 0) { announce('🏆 ¡GANASTE! ¡Sigue hasta el 100%!'); tone('level'); }
+    // New robots reuse the slots of caught ones: refresh their ranking avatar.
+    if (event.type === 'spawn') {
+      const actor = arena.actors[event.id], row = $('leaders').querySelector(`[data-actor="${event.id}"] img`);
+      if (row) { row.src = renderer.portraitURL(actor); row.alt = actor.name; }
+      if (spawnedAt !== arena.time) { spawnedAt = arena.time; announce('🤖 ¡Llegan robots nuevos!'); }
+    }
     if (event.type === 'end') end(event.won, event.reason, event.ranking);
   }
 }
-let wasSurging = false;
+let wasSurging = false, goal = 100, spawnedAt = -1;
 function renderHUD() {
   const player = arena.actors[0], percent = player.count / SIZE * 100;
   $('hud-territory').textContent = Math.round(percent) + '%';
-  $('goal-fill').style.width = Math.min(100, percent / 50 * 100) + '%';
+  $('goal-fill').style.width = Math.min(100, percent / goal * 100) + '%';
   $('hud-kills').textContent = player.kills; $('hud-bits').textContent = number(arena.bits);
   document.querySelectorAll('[data-milestone]').forEach(el => {
     const reached = percent >= Number(el.dataset.milestone);
     if (reached && !el.classList.contains('reached') && state === 'playing') announce(`⭐ ¡${el.dataset.milestone}%! ⭐`);
     el.classList.toggle('reached', reached);
   });
-  $('danger').hidden = !player.trail.length || !player.alive;
   $('wall-boost').hidden = !player.wallSurge || !player.alive;
   if (player.wallSurge && !wasSurging && state === 'playing') tone('wall');
   wasSurging = player.wallSurge;
@@ -697,7 +740,7 @@ function renderHUD() {
 }
 
 function showHelp() {
-  dialog(`<p class="eyebrow">📖 Cómo se juega</p><h2>¡Pinta el mapa!</h2><ul><li><b>🕹️</b><span>Muévete con el joystick o arrastrando el dedo. Tu personaje sigue avanzando solo.</span></li><li><b>🖌️</b><span>Sal de tu zona: dejarás un camino de pintura. Vuelve a casa y se pintará todo lo de dentro.</span></li><li><b>⚠️</b><span>Si un robot toca tu camino mientras estás fuera, ¡te atrapa! Tocar el tuyo o chocar con otros no pasa nada.</span></li><li><b>🎯</b><span>Toca el camino de un robot para atraparlo y quedarte con parte de su zona.</span></li><li><b>⭐</b><span>Recoge estrellas: te dan puntos y hacen más grande tu próxima zona.</span></li><li><b>⚡</b><span>Cerca de la valla vas más rápido.</span></li><li><b>🐥</b><span>Cada personaje es distinto: los comunes no tienen poderes; los raros, épicos, legendarios y míticos traen poderes como disparar, correr más o pintar sin volver a casa. Úsalos con los botones de la derecha y espera a que se recarguen.</span></li><li><b>🎁</b><span>Gana cofres al terminar una partida, al subir de nivel y cada 4 horas gratis. ¡Dentro hay personajes y colores nuevos!</span></li><li><b>🏆</b><span>¡Pinta más de la mitad del mapa para ganar un cofre épico!</span></li></ul><p>¿Te parece difícil? Activa el modo fácil 🐢 en el menú.</p><div class="dialog-buttons"><button id="close-help" class="dialog-button">¡ENTENDIDO! 👍</button></div>`);
+  dialog(`<p class="eyebrow">📖 Cómo se juega</p><h2>¡Pinta el mapa!</h2><ul><li><b>🕹️</b><span>Toca cualquier parte de la pantalla y desliza el dedo hacia donde quieras ir. Tu personaje sigue avanzando solo.</span></li><li><b>🖌️</b><span>Sal de tu zona: dejarás un camino de pintura. Vuelve a casa y se pintará todo lo de dentro.</span></li><li><b>⚠️</b><span>Si un robot toca tu camino mientras estás fuera, ¡te atrapa! Tocar el tuyo o chocar con otros no pasa nada.</span></li><li><b>🎯</b><span>Toca el camino de un robot para atraparlo y quedarte con parte de su zona.</span></li><li><b>⭐</b><span>Recoge estrellas: te dan puntos y hacen más grande tu próxima zona.</span></li><li><b>⚡</b><span>Cerca de la valla vas más rápido.</span></li><li><b>🐥</b><span>Cada personaje es distinto: los comunes no tienen poderes; los raros, épicos, legendarios y míticos traen poderes como disparar, correr más o pintar sin volver a casa. Úsalos con los botones de la derecha y espera a que se recarguen.</span></li><li><b>🎁</b><span>Gana cofres al terminar una partida, al subir de nivel y cada 4 horas gratis. ¡Dentro hay personajes y colores nuevos!</span></li><li><b>🏆</b><span>Pinta más de la mitad del mapa para ganar (y un cofre épico). ¡Luego sigue hasta pintarlo todo! Si atrapas a todos, llegan robots nuevos.</span></li><li><b>🏅</b><span>Cada partida te da o te quita copas 🏆 para subir de rango, de Bronce 1 a Leyenda 3. Mira el ranking mundial en Rangos.</span></li></ul><p>¿Te parece difícil? Activa el modo fácil 🐢 en el menú.</p><div class="dialog-buttons"><button id="close-help" class="dialog-button">¡ENTENDIDO! 👍</button></div>`);
   $('close-help').onclick = () => $('dialog').close();
 }
 document.querySelectorAll('[data-help]').forEach(button => button.onclick = showHelp);
@@ -707,6 +750,62 @@ $('dialog').addEventListener('cancel', event => {
   else if (state === 'results' || state === 'lobby') menu();
   else if (!$('crate-spinner')) $('dialog').close();
 });
+// ---------- Ranks and global ranking ----------
+// Shield emblem of a tier: the rank's colors, its division number, and a crown from Maestro up.
+let badgeSeq = 0;
+function rankBadge(tier, size = 56) {
+  const index = Math.floor(tier / 3), [light, dark] = RANKS[index].colors, id = 'rank-grad-' + badgeSeq++;
+  const crown = index >= 7 ? '<path d="M28 20 L33 4 L42 13 L50 2 L58 13 L67 4 L72 20 Z" fill="#ffd23a" stroke="#1c2a6e" stroke-width="4" stroke-linejoin="round"/>' : '';
+  return `<svg class="rank-badge" viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true"><defs><linearGradient id="${id}" x2="0" y2="1"><stop offset="0" stop-color="${light}"/><stop offset="1" stop-color="${dark}"/></linearGradient></defs>${crown}<path d="M50 14 L86 26 V50 C86 71 71 86 50 96 C29 86 14 71 14 50 V26 Z" fill="url(#${id})" stroke="#1c2a6e" stroke-width="6" stroke-linejoin="round"/><path d="M50 25 L75 33 V50 C75 64 65 75 50 83 C35 75 25 64 25 50 V33 Z" fill="#ffffff40"/><text x="50" y="68" text-anchor="middle" style="font:40px var(--display)" fill="#fff" stroke="#1c2a6e" stroke-width="7" paint-order="stroke">${tier % 3 + 1}</text></svg>`;
+}
+// The trophies line of the results, with a promotion or demotion when the rank changed.
+function rankResult(before, after, change) {
+  const moved = after.tier > before.tier ? `<b class="rank-up">⬆️ ¡Subiste a ${after.name}!</b>` : after.tier < before.tier ? `<b class="rank-down">⬇️ Bajaste a ${after.name}</b>` : '';
+  return `<div class="rank-result">${rankBadge(after.tier, 44)}<span>${change >= 0 ? '+' : ''}${change} 🏆 · <b>${after.name}</b>${moved}</span></div>`;
+}
+// Signed-in players keep their row of the global ranking up to date.
+function publishRank() { if (account) cloud.publishRank(account.uid, profile).catch(() => { /* Retried after the next match. */ }); }
+let rankTab = 'global', leaderboard = { status: 'idle', rows: [], at: 0 };
+async function loadLeaderboard(force = false) {
+  if (!cloud.available || leaderboard.status === 'loading' || (!force && leaderboard.status === 'ok' && Date.now() - leaderboard.at < 60000)) return;
+  leaderboard.status = 'loading'; renderRanks();
+  try { leaderboard = { status: 'ok', rows: await cloud.topPlayers(50), at: Date.now() }; }
+  catch { leaderboard = { status: 'error', rows: [], at: 0 }; }
+  renderRanks();
+}
+function renderRanks() {
+  const current = rankFor(profile.points);
+  $('rank-tab-icon').innerHTML = rankBadge(current.tier, 46);
+  if (screen !== 'ranks') return;
+  $('rank-emblem').innerHTML = rankBadge(current.tier, 110);
+  $('rank-name').textContent = current.name;
+  $('rank-points').textContent = current.next === null ? `${number(profile.points)} 🏆 · ¡Rango máximo!` : `${number(profile.points - current.start)} / ${number(current.next - current.start)} 🏆`;
+  $('rank-fill').style.width = (current.next === null ? 100 : (profile.points - current.start) / (current.next - current.start) * 100) + '%';
+  $('rank-next').textContent = current.next === null ? 'Eres una leyenda de Pintamundo.' : `Tienes ${number(profile.points)} 🏆. Siguiente: ${rankFor(current.next).name}`;
+  document.querySelectorAll('[data-ranks]').forEach(b => b.classList.toggle('selected', b.dataset.ranks === rankTab));
+  if (rankTab === 'ladder') {
+    $('rank-list').innerHTML = RANKS.map((rank, index) => `<div class="ladder-row">${[0, 1, 2].map(d => {
+      const tier = index * 3 + d, info = rankFor(tierStart(tier));
+      return `<div class="ladder-tier ${tier === current.tier ? 'current' : tier > current.tier ? 'locked' : ''}">${rankBadge(tier, 54)}<b>${info.name}</b><small>${number(info.start)} 🏆</small></div>`;
+    }).join('')}</div>`).join('');
+    return;
+  }
+  if (!cloud.available) { $('rank-list').innerHTML = '<p class="rank-note">El ranking mundial está en la app y en el juego en internet.</p>'; return; }
+  const join = account ? '' : '<div class="rank-join"><p>Entra con Google para aparecer en el ranking mundial.</p><button id="rank-login" class="dialog-button">☁️ Entrar con Google</button></div>';
+  const body = leaderboard.status === 'loading' || leaderboard.status === 'idle' ? '<p class="rank-note">Cargando el ranking… ⏳</p>'
+    : leaderboard.status === 'error' ? '<p class="rank-note">No pudimos cargar el ranking. Revisa tu conexión.</p><div class="dialog-buttons"><button id="rank-retry" class="dialog-button secondary">🔄 Reintentar</button></div>'
+    : !leaderboard.rows.length ? '<p class="rank-note">Todavía no hay nadie. ¡Sé el primero!</p>'
+    : `<ol class="world-ranking">${leaderboard.rows.map((row, i) => {
+        // Names come from other players' devices: only cleaned text reaches the page.
+        const points = Math.max(0, Math.floor(Number(row.points) || 0)), me = account && row.uid === account.uid;
+        return `<li class="${me ? 'me' : ''}"><span class="place">${i + 1}</span>${rankBadge(rankFor(points).tier, 38)}<b>${cleanName(row.name) || 'Jugador'}${me ? ' (tú)' : ''}</b><span class="points">${number(points)} 🏆</span></li>`;
+      }).join('')}</ol>`;
+  $('rank-list').innerHTML = join + body;
+  if ($('rank-login')) $('rank-login').onclick = openAccount;
+  if ($('rank-retry')) $('rank-retry').onclick = () => loadLeaderboard(true);
+}
+document.querySelectorAll('[data-ranks]').forEach(button => button.onclick = () => { rankTab = button.dataset.ranks; renderRanks(); });
+
 // ---------- Profile and cloud save ----------
 // The nickname is what other players see online. Cleaned names only contain letters,
 // digits, spaces, "_" and "-", so they are safe to place in HTML.
@@ -717,7 +816,7 @@ function editName(first = false, suggestion = '') {
   $('name-save').onclick = () => {
     const name = cleanName(input.value);
     if (!name) { toast('Tu nombre necesita de 3 a 14 letras o números.'); input.focus(); return; }
-    profile.name = name; save(true); renderMenu(); $('dialog').close();
+    profile.name = name; save(true); publishRank(); renderMenu(); $('dialog').close();
     if (first) toast(`¡Hola, ${name}! 🎨`);
   };
   input.onkeydown = event => { if (event.key === 'Enter') $('name-save').click(); };
@@ -748,6 +847,7 @@ async function signIn() {
   $('dialog').close(); renderAccount();
   await syncWithCloud(true);
   if (!account) return;
+  publishRank(); leaderboard.at = 0;
   toast('☁️ Conectado con Google.');
   if (!profile.name && state === 'menu' && !$('dialog').open) editName(true, cleanName(account.name.split(' ')[0]));
 }
@@ -882,13 +982,13 @@ function showLobby(message) {
 }
 // After an online match the HUD is still on screen; go back to the menu before showing a lobby.
 function menuBehindLobby() {
-  generation++; keys.clear(); aim = null; resetJoystick(); mirror = null; stopSpectating();
+  generation++; keys.clear(); aim = null; resetSteer(); mirror = null; stopSpectating();
   $('menu').hidden = false; $('hud').hidden = true; document.body.classList.remove('in-match');
   arena = new Arena(profile); renderMenu();
 }
 function startOnline(message) {
   generation++; arena = new Arena(profile); mirror = new Mirror(arena, message);
-  state = 'playing'; aim = null; keys.clear(); resetJoystick(); lastHeading = { angle: NaN, at: 0 };
+  state = 'playing'; aim = null; keys.clear(); resetSteer(); lastHeading = { angle: NaN, at: 0 };
   enterMatch(); announce('¡A PINTAR EN LÍNEA! 🌐'); renderHUD();
 }
 // Heading is sent when it changes noticeably, and at least every 200 ms.

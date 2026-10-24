@@ -27,7 +27,7 @@
       <div class="stat-pill"><span aria-hidden="true">🎯</span><b id="hud-kills">0</b></div>
       <div class="stat-pill" id="timer-pill" hidden><span aria-hidden="true">⏱️</span><b id="hud-timer">3:00</b></div>
     </div>
-    <div class="goal-bar" aria-label="Meta: pintar la mitad del mapa">
+    <div class="goal-bar" id="goal-bar" aria-label="Meta: pintar todo el mapa">
       <div class="goal-track"><i id="goal-fill"></i><b id="hud-territory">0%</b></div>
       <span class="milestone" data-milestone="10" style="--at:20%">⭐</span><span class="milestone" data-milestone="20" style="--at:40%">⭐</span><span class="milestone" data-milestone="30" style="--at:60%">⭐</span><span class="milestone" data-milestone="40" style="--at:80%">⭐</span>
       <span class="goal-trophy" aria-hidden="true">🏆</span>
@@ -41,11 +41,8 @@
       <div id="no-powers" class="no-powers" hidden>Sin poderes<br><small>¡Busca personajes raros en los cofres!</small></div>
     </div>
     <div id="announcement" class="announcement" hidden></div>
-    <div id="danger" class="danger" hidden>🏠 ¡VUELVE A CASA!</div>
     <div id="spectate" class="spectate" hidden><button id="spectate-prev" class="round-button" aria-label="Ver al jugador anterior">◀</button><span>👀 Mirando a <b id="spectate-name"></b></span><button id="spectate-next" class="round-button" aria-label="Ver al siguiente jugador">▶</button></div>
-    <div id="joystick" class="joystick" role="group" aria-label="Joystick táctil para moverte"><span id="joystick-knob" class="joystick-knob" aria-hidden="true"></span></div>
   </div>
-  <aside id="rotate-prompt" class="rotate-prompt"><span class="rotate-phone" aria-hidden="true">📱</span><h2 class="outlined">¡Gira el teléfono!</h2><p>Pintamundo se juega de lado.<br>Usa tus dos pulgares.</p></aside>
   <main id="menu" class="menu">
     <header class="topbar">
       <button class="level-badge" data-tab="progress" aria-label="Ver mi progreso"><img class="ui-icon" src="ui/level.png" alt=""><span id="menu-level">1</span></button>
@@ -98,13 +95,19 @@
           <footer><span><span class="live-dot"></span> <span id="save-label">Tu progreso se guarda solo</span></span><button id="profile-button">👤 <span id="profile-name">Elige tu nombre</span></button><button id="account-button" hidden>☁️ Guardar en mi cuenta</button></footer>
         </div>
       </section>
+      <section class="screen screen-ranks" data-screen="ranks" hidden>
+        <div class="rank-hero"><div id="rank-emblem" class="rank-emblem"></div><div class="rank-info"><b id="rank-name" class="outlined">Bronce 1</b><div class="xp-track"><i id="rank-fill"></i><span id="rank-points">0 🏆</span></div><small id="rank-next"></small></div></div>
+        <div class="segmented rank-tabs"><button class="selected" data-ranks="global">🌍 Ranking mundial</button><button data-ranks="ladder">🏅 Todos los rangos</button></div>
+        <div id="rank-list" class="panel-blue rank-list"></div>
+        <p class="screen-note">Ganas copas 🏆 con cada partida: más con estrellas, atrapando rivales y pintando todo el mapa. Las partidas sin estrellas restan unas pocas.</p>
+      </section>
     </div>
     <nav class="tabbar" aria-label="Menú principal">
       <button class="tab" data-tab="crates"><span><img class="ui-icon" src="ui/chest.png" alt=""></span><b>Cofres</b></button>
       <button class="tab" data-tab="collection"><span><img class="ui-icon" src="ui/collection.png" alt=""></span><b>Colección</b></button>
       <button id="play" class="play-button" aria-label="¡A jugar!"><span id="play-icon">▶</span></button>
       <button class="tab" data-tab="progress"><span><img class="ui-icon" src="ui/trophy.png" alt=""></span><b>Progreso</b></button>
-      <button id="help" class="tab" data-help><span><img class="ui-icon" src="ui/help.png" alt=""></span><b>Ayuda</b></button>
+      <button class="tab" data-tab="ranks"><span id="rank-tab-icon"></span><b>Rangos</b></button>
     </nav>
   </main>
   <dialog id="dialog"><div id="dialog-content"></div></dialog>

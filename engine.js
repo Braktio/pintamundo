@@ -18,12 +18,16 @@ export const POWERS = {
   shield: { name: 'Burbuja', icon: '🛡️', duration: 1.5, cooldown: 16, description: 'Protege tu camino y hace rebotar a quien lo toque.' },
   magnet: { name: 'Imán', icon: '🧲', duration: 4, cooldown: 14, description: 'Atrae las estrellas cercanas hacia ti.' },
   ghost: { name: 'Fantasma', icon: '👻', duration: 3, cooldown: 16, description: 'Los robots no ven la parte nueva de tu camino.' },
-  shoot: { name: 'Disparo', icon: '🎯', duration: 0, cooldown: 8, description: 'Lanza una bola de pintura. Si toca el camino de un rival, ¡lo atrapa!' },
+  shoot: { name: 'Disparo', icon: '🎯', duration: 0, cooldown: 8, description: 'Lanza una bola de pintura que pinta donde cae. Si toca el camino de un rival, ¡lo atrapa!' },
   paint: { name: 'Rodillo', icon: '🖌️', duration: 3, cooldown: 18, description: 'Durante 3 segundos pintas tu zona por donde pasas, sin volver a casa.' },
   bomb: { name: 'Bomba de color', icon: '💥', duration: 0, cooldown: 22, description: 'Pinta de golpe un gran círculo a tu alrededor.' },
   freeze: { name: 'Congelar', icon: '❄️', duration: 0, cooldown: 20, description: 'Congela un momento a los rivales que estén cerca.' }
 };
 export const FREEZE_TIME = 1.6, SHOT_SPEED = 18, SHOT_LIFE = .8;
+// Where a paint shot lands it paints a small disc, like a little Bomba de color.
+export const SHOT_PAINT = 2.2;
+// Solo: seconds before new robots appear once every robot is out, and how many.
+export const RESPAWN_DELAY = 2.5, RESPAWN_BOTS = 3;
 // Characters are drawn procedurally from `look`. Old ids (interceptor, tron, disc,
 // phoenix, spectre, rift) are kept so saved profiles stay valid; `level` marks the
 // characters the adventure road still gives for free.
@@ -84,6 +88,37 @@ export const CHESTS = {
 export const FREE_CHEST_HOURS = 4;
 export const levelFor = xp => 1 + Math.floor((Math.max(0, xp) / 200) ** (1 / 1.45));
 export const levelXP = level => Math.ceil(200 * (level - 1) ** 1.45);
+
+// Ranked ladder: 10 ranks with 3 divisions each (Bronce 1 → Bronce 3 → Plata 1 …), 30 tiers.
+// Trophies (🏆) are won or lost after every match; each tier needs a few more than the last.
+export const RANKS = [
+  { id: 'bronce', name: 'Bronce', colors: ['#f0a868', '#a45a22'] },
+  { id: 'plata', name: 'Plata', colors: ['#eef3fa', '#8d9ab0'] },
+  { id: 'oro', name: 'Oro', colors: ['#ffe066', '#e09a00'] },
+  { id: 'platino', name: 'Platino', colors: ['#a8f5f0', '#2aa9b0'] },
+  { id: 'esmeralda', name: 'Esmeralda', colors: ['#8ef0a8', '#1f9a4f'] },
+  { id: 'rubi', name: 'Rubí', colors: ['#ff9aae', '#c81d4a'] },
+  { id: 'diamante', name: 'Diamante', colors: ['#c9f4ff', '#3d8cff'] },
+  { id: 'maestro', name: 'Maestro', colors: ['#dcb4ff', '#7a3fe0'] },
+  { id: 'granmaestro', name: 'Gran Maestro', colors: ['#ffb08a', '#d6452a'] },
+  { id: 'leyenda', name: 'Leyenda', colors: ['#fff3a0', '#ff4f8b'] }
+];
+export const TIERS = RANKS.length * 3;
+export const tierStart = tier => 40 * tier + 4 * tier * tier;
+// { tier, rank, division, name, start, next } for a trophy count; `next` is null at the top.
+export function rankFor(points) {
+  let tier = 0;
+  while (tier < TIERS - 1 && tierStart(tier + 1) <= points) tier++;
+  const rank = RANKS[Math.floor(tier / 3)], division = tier % 3 + 1;
+  return { tier, rank, division, name: `${rank.name} ${division}`, start: tierStart(tier), next: tier < TIERS - 1 ? tierStart(tier + 1) : null };
+}
+// Trophies for one match: the stars earned, catches (up to 5), painting the whole map and,
+// online, the final place. Poor matches cost a few; the total never goes below zero.
+export function rankChange({ stars, kills = 0, perfect = false, place = 0, players = 0 }) {
+  let change = [-6, 4, 10, 18][stars] + Math.min(kills, 5) * 2 + (perfect ? 20 : 0);
+  if (players > 1 && place) change += place === 1 ? 8 : place <= 3 ? 3 : place === players ? -3 : 0;
+  return change;
+}
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const cell = (x, y) => Math.floor(y) * WIDTH + Math.floor(x);
 export const coords = index => ({ x: index % WIDTH + .5, y: Math.floor(index / WIDTH) + .5 });
@@ -107,7 +142,7 @@ export function crossedCells(x0, y0, x1, y1) {
 export const emptyChests = () => Object.fromEntries(Object.keys(CHESTS).map(type => [type, 0]));
 export function freshProfile() {
   // New players start with a rare chest so their first character with a power is one tap away.
-  return { version: 1, name: '', updatedAt: 0, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0 };
+  return { version: 1, name: '', updatedAt: 0, points: 0, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0 };
 }
 // Player nicknames: 3 to 14 letters, digits, spaces, "_" or "-". Returns '' when unusable.
 export function cleanName(text) {
@@ -148,6 +183,8 @@ export function parseProfile(raw) {
   const latest = Date.now() + FREE_CHEST_HOURS * 3600000;
   result.freeChestAt = Number.isFinite(data.freeChestAt) && data.freeChestAt > 0 ? Math.min(data.freeChestAt, latest) : 0;
   result.updatedAt = Number.isFinite(data.updatedAt) && data.updatedAt > 0 ? data.updatedAt : 0;
+  // Older saves have no trophies yet.
+  if (data.points !== undefined) { if (!count(data.points) || data.points > 1e6) throw new Error('Copas inválidas'); result.points = Math.floor(data.points); }
   return { ...result, name: cleanName(data.name), easy: data.easy === true, nemesis: typeof data.nemesis === 'string' ? data.nemesis.slice(0, 40) : '', skin: data.skin, trail: data.trail };
 }
 // Every chest prize: characters (except the starter) and the special trail colors.
@@ -191,14 +228,10 @@ export class Arena {
     this.trailMasks = new Uint8Array(SIZE);
     this.wallRange = 40 / CELL_PIXELS;
     this.events = []; this.orbs = []; this.projectiles = []; this.time = 0; this.revision = 0; this.orbRevision = 0;
-    this.ended = false; this.won = false; this.bits = 0; this.xp = 0;
+    this.ended = false; this.won = false; this.bits = 0; this.xp = 0; this.respawnAt = 0;
     const humans = (options.humans || [{ skin: profile.skin, color: TRAILS.find(t => t.id === profile.trail)?.color || COLORS[0], name: 'Tú' }]).slice(0, MAX_PLAYERS);
     const cast = humans.map(h => characterFor(h.skin));
-    for (let id = humans.length; id < SPAWNS.length; id++) {
-      const pool = CHARACTERS.filter(c => !cast.includes(c) && (!this.easy || c.rarity === 'comun' || c.rarity === 'raro'));
-      let roll = this.random() * pool.reduce((sum, c) => sum + BOT_WEIGHTS[c.rarity], 0);
-      cast.push(pool.find(c => (roll -= BOT_WEIGHTS[c.rarity]) < 0) || pool.at(-1));
-    }
+    for (let id = humans.length; id < SPAWNS.length; id++) cast.push(this.botCharacter(cast));
     // Every actor needs a distinct trail color; humans keep theirs unless it is already taken.
     const used = [];
     const pick = wanted => { const color = wanted && !used.includes(wanted) ? wanted : COLORS.find(c => !used.includes(c)); used.push(color); return color; };
@@ -213,13 +246,52 @@ export class Arena {
     for (const actor of this.actors) { this.seed(actor); actor.best = actor.count; }
     for (let i = 0; i < 45; i++) this.spawnOrb();
   }
+  // A weighted random character not in `taken`; easy mode only uses commons and rares.
+  botCharacter(taken) {
+    const pool = CHARACTERS.filter(c => !taken.includes(c) && (!this.easy || c.rarity === 'comun' || c.rarity === 'raro'));
+    let roll = this.random() * pool.reduce((sum, c) => sum + BOT_WEIGHTS[c.rarity], 0);
+    return pool.find(c => (roll -= BOT_WEIGHTS[c.rarity]) < 0) || pool.at(-1);
+  }
+  // Solo: when every robot is out, a few new ones appear in unpainted space, away from the
+  // player, so the match can go on until the whole map is painted. They reuse the slots
+  // of robots that are out. Without enough free space, nobody comes back.
+  respawn() {
+    const player = this.actors[0], spots = [];
+    const free = (x, y, radius) => {
+      for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
+        const cx = x + dx, cy = y + dy, index = cy * WIDTH + cx;
+        if (dx * dx + dy * dy > radius * radius) continue;
+        if (cx < 0 || cy < 0 || cx >= WIDTH || cy >= HEIGHT || this.grid[index] !== -1 || this.trails[index] !== -1) return false;
+      }
+      return true;
+    };
+    for (let tries = 0; tries < 600 && spots.length < RESPAWN_BOTS; tries++) {
+      const x = 5 + Math.floor(this.random() * (WIDTH - 10)), y = 5 + Math.floor(this.random() * (HEIGHT - 10));
+      if (Math.hypot(x - player.x, y - player.y) < 12 || spots.some(s => Math.hypot(s.x - x, s.y - y) < 12)) continue;
+      if (free(x, y, tries < 300 ? 5 : 4)) spots.push({ x, y });
+    }
+    const out = this.actors.filter(a => !a.human && !a.alive), taken = this.actors.filter(a => a.alive).map(a => characterFor(a.skin));
+    spots.forEach((spot, i) => {
+      const actor = out[i]; if (!actor) return;
+      const character = this.botCharacter(taken), angle = this.random() * Math.PI * 2;
+      taken.push(character);
+      Object.assign(actor, {
+        name: character.name, skin: character.id, rarity: character.rarity, powers: [...character.powers],
+        x: spot.x + .5, y: spot.y + .5, angle, desired: angle, alive: true, trail: [], kills: 0, lastCell: cell(spot.x, spot.y),
+        timers: {}, ready: {}, aiAt: 0, route: [], stunUntil: 0, frozenUntil: 0, harvestUntil: 0, wallSurge: false
+      });
+      this.seed(actor); actor.best = actor.count;
+      this.emit('spawn', { id: actor.id, x: actor.x, y: actor.y });
+    });
+  }
   // Solo screens read the local player's best territory.
   get best() { return this.actors[0].best; }
   // A player who disconnects is handed over to the AI so the match stays fair.
   leave(id) { const actor = this.actors[id]; if (actor) { actor.human = false; actor.aiAt = 0; } }
   finish(winner, reason) {
     if (this.ended) return;
-    this.ended = true; this.won = winner === 0;
+    // A solo victory (half the map) counts even if the player is caught afterwards.
+    this.ended = true; this.won = winner === 0 || (this.solo && this.won);
     const ranking = [...this.actors].sort((a, b) => b.count - a.count || b.kills - a.kills).map(a => a.id);
     this.emit('end', { won: this.won, winner, reason, ranking });
   }
@@ -353,13 +425,18 @@ export class Arena {
     if (victim.human) {
       if (this.solo) this.finish(-1, reason);
       else { this.emit('out', { id: victim.id, reason }); if (!this.actors.some(a => a.human && a.alive)) this.finish(-1, '¡Atraparon a todos los jugadores!'); }
-    }
+    } else if (this.solo && !this.respawnAt && !this.actors.some(a => !a.human && a.alive)) this.respawnAt = this.time + RESPAWN_DELAY;
     this.checkWin();
   }
+  // Solo: more than half the map is a victory, but the match goes on until the whole map
+  // is painted or the player is caught. Online: more than half ends the match.
   checkWin() {
     for (const actor of this.actors) if (actor.human) {
       actor.best = Math.max(actor.best, actor.count);
-      if (!this.ended && actor.count / SIZE > .5) this.finish(actor.id, this.solo ? '¡Pintaste más de la mitad del mapa!' : `¡${actor.name} pintó más de la mitad del mapa!`);
+      if (this.ended) continue;
+      if (!this.solo) { if (actor.count / SIZE > .5) this.finish(actor.id, `¡${actor.name} pintó más de la mitad del mapa!`); continue; }
+      if (!this.won && actor.count / SIZE > .5) { this.won = true; this.emit('victory', { id: actor.id }); }
+      if (actor.count >= SIZE) this.finish(actor.id, '¡Pintaste todo el mapa!');
     }
   }
   visit(actor, index) {
@@ -448,7 +525,8 @@ export class Arena {
     }
   }
   // Paint shots fly straight; touching a rival's exposed trail catches its owner,
-  // touching a rival's body only stuns it briefly. Shields block shots.
+  // touching a rival's body only stuns it briefly. Shields block shots. Wherever a shot
+  // ends, it paints a small disc for its owner.
   moveShots(dt) {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const shot = this.projectiles[i], owner = this.actors[shot.owner];
@@ -469,7 +547,11 @@ export class Arena {
         if (body) { done = true; if (!this.active(body, 'shield')) body.stunUntil = Math.max(body.stunUntil, this.time + .6); }
       }
       shot.x = nx; shot.y = ny;
-      if (done) { this.projectiles.splice(i, 1); this.emit('splat', { x: clamp(nx, 0, WIDTH), y: clamp(ny, 0, HEIGHT), color: owner.color }); }
+      if (done) {
+        const x = clamp(nx, .01, WIDTH - .01), y = clamp(ny, .01, HEIGHT - .01);
+        this.projectiles.splice(i, 1); this.emit('splat', { x, y, color: owner.color });
+        if (owner.alive && !this.ended) this.splash(owner, cell(x, y), SHOT_PAINT, 'shot');
+      }
       if (this.ended) return;
     }
   }
@@ -477,6 +559,7 @@ export class Arena {
     if (this.ended) return;
     this.time += dt;
     if (this.timeLimit && this.time >= this.timeLimit) { this.finish(this.actors.reduce((a, b) => b.count > a.count ? b : a).id, '¡Se acabó el tiempo!'); return; }
+    if (this.respawnAt && this.time >= this.respawnAt) { this.respawnAt = 0; this.respawn(); }
     for (const actor of this.actors) {
       if (!actor.alive) continue;
       if (!actor.human) this.ai(actor);

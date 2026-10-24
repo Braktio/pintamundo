@@ -52,6 +52,22 @@ export async function download(uid) {
   else { const { store, db } = await loadWeb(); data = (await store.getDoc(store.doc(db, 'users', uid))).data(); }
   return typeof data?.profile === 'string' ? data.profile : null;
 }
+// Global ranking: one public row per signed-in player at ranking/{uid}, read by everyone.
+export async function publishRank(uid, profile) {
+  const data = { name: profile.name || 'Jugador', points: profile.points, skin: profile.skin, updatedAt: Date.now() };
+  if (nativeApp) await Store.setDocument({ reference: `ranking/${uid}`, data });
+  else { const { store, db } = await loadWeb(); await store.setDoc(store.doc(db, 'ranking', uid), data); }
+}
+// The best players, most trophies first: [{ uid, name, points, skin }].
+export async function topPlayers(limit = 50) {
+  if (nativeApp) {
+    const { snapshots } = await Store.getCollection({ reference: 'ranking', queryConstraints: [{ type: 'orderBy', fieldPath: 'points', directionStr: 'desc' }, { type: 'limit', limit }] });
+    return snapshots.map(s => ({ uid: s.id, ...s.data }));
+  }
+  const { store, db } = await loadWeb();
+  const result = await store.getDocs(store.query(store.collection(db, 'ranking'), store.orderBy('points', 'desc'), store.limit(limit)));
+  return result.docs.map(d => ({ uid: d.id, ...d.data() }));
+}
 export async function upload(uid, profile, level) {
   const data = { profile: JSON.stringify(profile), updatedAt: profile.updatedAt, name: profile.name, level };
   if (nativeApp) await Store.setDocument({ reference: `users/${uid}`, data });

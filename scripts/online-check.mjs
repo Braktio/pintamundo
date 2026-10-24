@@ -90,7 +90,7 @@ try {
     await beto.screenshot('preview-online-spectator.png');
     const name = await beto.evaluate('document.getElementById("spectate-name").textContent');
     assert.ok(name.length > 0, 'spectator mode names who you are watching');
-    assert.equal(await beto.evaluate('getComputedStyle(document.getElementById("joystick")).display'), 'none', 'controls hide while watching');
+    assert.equal(await beto.evaluate('getComputedStyle(document.querySelector(".abilities")).display'), 'none', 'controls hide while watching');
     await beto.evaluate('document.getElementById("spectate-next").click()');
     await sleep(300);
     console.log('Spectator OK: watching ' + name);

@@ -1,6 +1,7 @@
 rules_version = '2';
-// Each player can only read and write their own document, users/{uid}, written by cloud.js.
-// Paste these rules in Firebase console → Firestore Database → Rules.
+// users/{uid}: each player's saved profile, private to its owner (written by cloud.js).
+// ranking/{uid}: the public global ranking; anyone can read it, each player writes only
+// their own row. Paste these rules in Firebase console → Firestore Database → Rules.
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{uid} {
@@ -9,6 +10,16 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['profile', 'updatedAt', 'name', 'level'])
         && request.resource.data.profile is string
         && request.resource.data.profile.size() < 20000;
+    }
+    match /ranking/{uid} {
+      allow read: if true;
+      allow delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'points', 'skin', 'updatedAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 14
+        && request.resource.data.skin is string && request.resource.data.skin.size() <= 20
+        && request.resource.data.points is number
+        && request.resource.data.points >= 0 && request.resource.data.points <= 1000000;
     }
   }
 }

@@ -3,7 +3,7 @@
 @font-face { font-family:'Baloo 2'; font-style:normal; font-weight:500; font-display:swap; src:url('fonts/baloo-2-latin-500-normal.woff2') format('woff2') }
 @font-face { font-family:'Baloo 2'; font-style:normal; font-weight:700; font-display:swap; src:url('fonts/baloo-2-latin-700-normal.woff2') format('woff2') }
 @font-face { font-family:'Baloo 2'; font-style:normal; font-weight:800; font-display:swap; src:url('fonts/baloo-2-latin-800-normal.woff2') format('woff2') }
-:root {
+:root { --vw:1vw; --vh:1dvh;
   color-scheme:light;
   --ink:#1c2a6e;
   --blue:#2d7bff;
@@ -43,7 +43,7 @@ img { display:block }
 #arena { position:fixed; inset:0; width:100%; height:100%; touch-action:none; outline:0; z-index:0 }
 
 /* Chunky white display text with a navy outline and drop shadow. */
-.outlined,.ribbon,h1,.card-foot,.tab b,.currency strong,.announcement,.goal-track b,.leaderboard li b,.danger,.wall-boost {
+.outlined,.ribbon,h1,.card-foot,.tab b,.currency strong,.announcement,.goal-track b,.leaderboard li b,.wall-boost {
   font-family:var(--display);
   font-weight:400;
   color:#fff;
@@ -140,10 +140,10 @@ img { display:block }
 .home-bar { position:relative; width:260px; height:32px; border:4px solid var(--ink); border-radius:99px; background:#1d2a8c; overflow:hidden }
 .home-bar i { display:block; height:100%; width:0; background:linear-gradient(#8ff067,#43c41f); transition:width .6s }
 .home-bar b { position:absolute; inset:0; display:grid; place-items:center; font:17px var(--display); color:#fff; -webkit-text-stroke:4px var(--ink); paint-order:stroke fill }
-.island { position:relative; display:grid; place-items:center; width:min(420px,80vw); height:250px; margin-top:12px }
+.island { position:relative; display:grid; place-items:center; width:min(420px,calc(80 * var(--vw))); height:250px; margin-top:12px }
 .island:before { content:''; position:absolute; left:6%; right:6%; top:44%; bottom:6%; border-radius:48% 52% 40% 60%/55% 45% 55% 45%; background:#fff; box-shadow:0 12px 0 #b8ddff,0 16px 0 var(--ink); border:4px solid var(--ink) }
 #mascot { position:relative; width:230px; height:230px }
-h1 { margin:8px 0 0; font-size:clamp(30px,6vw,46px); line-height:1.05 }
+h1 { margin:8px 0 0; font-size:clamp(30px,calc(6 * var(--vw)),46px); line-height:1.05 }
 .home-tip { max-width:420px; margin:2px 0 0; color:#fff; font-weight:700; font-size:17px; text-shadow:0 2px 0 #1c2a6e88 }
 .home-side { position:absolute; top:12px; display:flex; flex-direction:column; gap:16px }
 .home-side.left { left:0 }
@@ -279,7 +279,7 @@ footer button { font-size:15px; min-height:46px }
 .play-button.home span { margin-left:0; font-size:46px; -webkit-text-stroke:0; text-shadow:none; filter:drop-shadow(0 3px 0 var(--ink)) }
 
 /* ---------- In-match HUD ---------- */
-#hud { position:fixed; inset:0; z-index:3; pointer-events:none; height:100dvh }
+#hud { position:fixed; inset:0; z-index:3; pointer-events:none; height:calc(100 * var(--vh)) }
 .hud-left { position:absolute; top:max(10px,env(safe-area-inset-top)); left:max(10px,env(safe-area-inset-left)); display:flex; flex-direction:column; align-items:flex-start; gap:8px }
 .match-controls { display:flex; gap:8px; pointer-events:auto }
 .pilot-badge { display:flex; align-items:center; gap:6px; padding:2px 14px 2px 2px; border:4px solid var(--ink); border-radius:99px; background:#fff; box-shadow:0 4px 0 var(--ink) }
@@ -288,7 +288,7 @@ footer button { font-size:15px; min-height:46px }
 .stat-pill { display:flex; align-items:center; gap:6px; min-width:96px; padding:0 14px 0 4px; height:40px; border:4px solid var(--ink); border-radius:99px; background:#fff; box-shadow:0 4px 0 var(--ink) }
 .stat-pill span { font-size:26px; margin-left:-12px; filter:drop-shadow(0 2px 0 var(--ink)) }
 .stat-pill b { margin-left:auto; font:20px var(--display); color:var(--ink) }
-.goal-bar { position:absolute; top:max(18px,calc(env(safe-area-inset-top) + 10px)); left:50%; width:min(28vw,300px); transform:translateX(-50%) }
+.goal-bar { position:absolute; top:max(18px,calc(env(safe-area-inset-top) + 10px)); left:50%; width:min(calc(28 * var(--vw)),300px); transform:translateX(-50%) }
 .goal-track { position:relative; height:26px; border:3px solid var(--ink); border-radius:99px; background:#4a4fc7; box-shadow:0 4px 0 var(--ink),inset 0 4px 0 #0002; overflow:hidden }
 .goal-track i { display:block; height:100%; width:0; background:linear-gradient(#8ff067,#43c41f); transition:width .3s }
 .goal-track b { position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:16px; line-height:1; -webkit-text-stroke:4px var(--ink) }
@@ -317,14 +317,10 @@ footer button { font-size:15px; min-height:46px }
 .ability.ready small { background:var(--green) }
 .ability.active .ability-ring { animation:pulse-ring .6s ease-in-out infinite alternate }
 .ability.active .ability-ring:after { background:linear-gradient(#fff08a,var(--yellow)) }
-.announcement { position:absolute; left:50%; top:28%; max-width:86vw; transform:translateX(-50%); font-size:46px; line-height:1.05; text-align:center; -webkit-text-stroke:9px var(--ink); text-shadow:0 5px 0 var(--ink); animation:pop-in .45s cubic-bezier(.2,1.6,.4,1); --tx:-50% }
-.danger { position:absolute; left:50%; bottom:calc(16px + env(safe-area-inset-bottom)); transform:translateX(-50%); padding:4px 22px; border:4px solid var(--ink); border-radius:99px; background:linear-gradient(#ff8aa0,var(--red)); font-size:22px; white-space:nowrap; box-shadow:0 5px 0 var(--ink); animation:nudge .9s ease-in-out infinite }
-.joystick { position:absolute; left:calc(150px + env(safe-area-inset-left)); bottom:calc(14px + env(safe-area-inset-bottom)); width:136px; height:136px; border:4px solid var(--ink); border-radius:50%; background:radial-gradient(circle,#ffffffa0 0 38%,#ffffff55 39%); box-shadow:0 5px 0 var(--ink),inset 0 0 0 8px #2d7bff33; pointer-events:auto; touch-action:none; user-select:none }
-.joystick-knob { position:absolute; top:50%; left:50%; width:62px; height:62px; transform:translate(-50%,-50%); border:4px solid var(--ink); border-radius:50%; background:radial-gradient(circle at 35% 28%,#ffffffb0 0 16%,transparent 17%),linear-gradient(#ffe766,var(--yellow) 55%,var(--yellow-deep)); box-shadow:0 5px 0 var(--ink); pointer-events:none }
-.joystick.engaged { background:radial-gradient(circle,#ffffffc0 0 38%,#ffffff80 39%) }
+.announcement { position:absolute; left:50%; top:28%; max-width:calc(86 * var(--vw)); transform:translateX(-50%); font-size:46px; line-height:1.05; text-align:center; -webkit-text-stroke:9px var(--ink); text-shadow:0 5px 0 var(--ink); animation:pop-in .45s cubic-bezier(.2,1.6,.4,1); --tx:-50% }
 
 /* ---------- Dialogs ---------- */
-dialog { width:min(92vw,540px); max-height:90vh; overflow:auto; padding:22px; border:5px solid var(--ink); border-radius:30px; background:var(--pattern) 0 0/180px,linear-gradient(#5fa0ff,var(--blue-deep)); color:#fff; box-shadow:0 8px 0 var(--ink),0 30px 80px #0007; text-align:center }
+dialog { width:min(calc(92 * var(--vw)),540px); max-height:calc(90 * var(--vh)); overflow:auto; padding:22px; border:5px solid var(--ink); border-radius:30px; background:var(--pattern) 0 0/180px,linear-gradient(#5fa0ff,var(--blue-deep)); color:#fff; box-shadow:0 8px 0 var(--ink),0 30px 80px #0007; text-align:center }
 dialog[open] { animation:pop-in .35s cubic-bezier(.2,1.5,.4,1) }
 dialog::backdrop { background:#0e1640b0; backdrop-filter:blur(3px) }
 dialog .eyebrow { margin:0; font:18px var(--display); color:var(--yellow); -webkit-text-stroke:4px var(--ink); paint-order:stroke fill }
@@ -353,28 +349,21 @@ dialog li>b { flex:none; font-size:30px; line-height:1 }
 .crate-opening.revealed:before { content:''; position:absolute; width:260px; height:260px; z-index:-1; background:repeating-conic-gradient(#ffe76680 0 12deg,transparent 12deg 30deg); border-radius:50%; animation:spin 6s linear infinite }
 .sparkles { position:absolute; inset:0; pointer-events:none }
 .sparkles i { position:absolute; left:50%; top:38%; font-style:normal; font-size:26px; animation:sparkle 1s ease-out forwards }
-#toasts { position:fixed; left:50%; bottom:calc(100px + env(safe-area-inset-bottom)); transform:translateX(-50%); width:min(90vw,420px); z-index:20; pointer-events:none }
+#toasts { position:fixed; left:50%; bottom:calc(100px + env(safe-area-inset-bottom)); transform:translateX(-50%); width:min(calc(90 * var(--vw)),420px); z-index:20; pointer-events:none }
 .toast { margin-top:8px; padding:10px 18px; border:4px solid var(--ink); border-radius:20px; background:#fff; color:var(--ink); font-size:17px; font-weight:700; text-align:center; box-shadow:0 4px 0 var(--ink); animation:pop-in .3s cubic-bezier(.2,1.5,.4,1) }
 
 /* ---------- Rotate prompt (only during a match) ---------- */
-.rotate-prompt { display:none; position:fixed; inset:0; z-index:100; flex-direction:column; align-items:center; justify-content:center; padding:30px; text-align:center; background:var(--pattern) 0 0/180px,linear-gradient(#3d8cff,var(--blue-deep)); color:#fff }
-.rotate-phone { display:block; font-size:100px; line-height:1; filter:drop-shadow(0 5px 0 var(--ink)); animation:rotate-phone 2.2s ease-in-out infinite }
-.rotate-prompt h2 { margin:22px 0 4px; font-size:40px }
-.rotate-prompt p { font-size:20px; font-weight:700; text-shadow:0 2px 0 #1c2a6e99 }
-@media(orientation:portrait) { body.in-match .rotate-prompt { display:flex } }
 
 /* ---------- Animations ---------- */
 @keyframes bounce { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-5px) } }
 @keyframes pulse { 0%,100% { transform:scale(1) } 50% { transform:scale(1.35) } }
 @keyframes pulse-ring { to { transform:scale(1.08); box-shadow:0 5px 0 var(--ink),0 0 0 8px #ffd23a88 } }
 @keyframes shake { 0%,70%,100% { transform:rotate(0) } 75% { transform:rotate(-8deg) } 85% { transform:rotate(8deg) } 92% { transform:rotate(-4deg) } }
-@keyframes nudge { 0%,100% { transform:translateX(-50%) scale(1) } 50% { transform:translateX(-50%) scale(1.06) } }
 @keyframes pop-in { from { opacity:0; transform:translateX(var(--tx,0)) scale(.4) } to { opacity:1; transform:translateX(var(--tx,0)) scale(1) } }
 @keyframes screen-in { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:none } }
 @keyframes reveal { from { transform:scale(.2) rotate(-200deg) } to { transform:scale(1) rotate(0) } }
 @keyframes spin { to { transform:rotate(360deg) } }
 @keyframes sparkle { from { opacity:1; transform:translate(-50%,-50%) } to { opacity:0; transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(1.4) } }
-@keyframes rotate-phone { 0%,20% { transform:rotate(0) } 50%,80% { transform:rotate(-90deg) } 100% { transform:rotate(0) } }
 
 /* ---------- Responsive ---------- */
 @media(max-width:520px) {
@@ -426,14 +415,12 @@ dialog li>b { flex:none; font-size:30px; line-height:1 }
   .pedestal { height:150px; width:220px }
   #next-unlock { width:140px; height:140px }
   .pedestal:before { width:200px; height:44px }
-  .map-panel { display:none }
-  .joystick { left:calc(18px + env(safe-area-inset-left)); width:124px; height:124px }
-  .joystick-knob { width:56px; height:56px }
+  #minimap { width:84px; height:72px }
   .hud-left { gap:6px }
   .match-controls .round-button { width:46px; height:46px }
   .pilot-badge { display:none }
   .stat-pill { height:36px; min-width:84px }
-  .goal-bar { width:min(26vw,240px) }
+  .goal-bar { width:min(calc(26 * var(--vw)),240px) }
   .leaderboard { gap:4px }
   .leaderboard li { height:40px }
   .leaderboard li img { width:40px; height:40px }
@@ -490,7 +477,7 @@ dialog li>b { flex:none; font-size:30px; line-height:1 }
 }
 /* Short landscape screens: dialogs must fit without scrolling to reach their buttons. */
 @media(orientation:landscape) and (max-height:560px) {
-  dialog { padding:12px 18px; max-height:94vh }
+  dialog { padding:12px 18px; max-height:calc(94 * var(--vh)) }
   dialog h2 { font-size:28px; margin:0 0 4px }
   dialog p { margin:6px 0 }
   .dialog-buttons { margin-top:8px }
@@ -509,7 +496,7 @@ dialog li>b { flex:none; font-size:30px; line-height:1 }
 .spectate span { padding:0 6px; font:18px var(--display); color:var(--ink); white-space:nowrap }
 .spectate span b { color:var(--blue) }
 .spectate .round-button { width:48px; height:48px; font-size:20px }
-body.spectating .joystick,body.spectating .abilities,body.spectating .danger { display:none!important }
+body.spectating .abilities { display:none!important }
 @media(orientation:landscape) and (max-height:560px) {
   .result-stars { font-size:34px; margin:0 }
   .results { margin:6px 0; gap:8px }
@@ -556,3 +543,43 @@ body.spectating .joystick,body.spectating .abilities,body.spectating .danger { d
 .level-badge img { border-radius:0; filter:drop-shadow(0 3px 0 var(--ink)) }
 .level-badge span { left:50%; right:auto; bottom:-4px; transform:translateX(-50%) }
 @media(orientation:landscape) and (max-height:560px) { .play-button.home span .ui-icon { width:50px; height:50px } }
+
+/* Always landscape: a phone held upright in a browser gets the whole game turned 90°
+   (orient() in game.js sets --vw, --vh and --real-w). Dialogs live in the top layer,
+   outside the body, so they are turned on their own. */
+body.turned { position:fixed; top:0; left:0; width:calc(100 * var(--vw)); height:calc(100 * var(--vh)); overflow:hidden; transform-origin:0 0; transform:translateX(var(--real-w)) rotate(90deg) }
+body.turned dialog[open] { transform:rotate(90deg) }
+body.in-match { touch-action:none; overscroll-behavior:none }
+
+/* Ranks: emblem, progress to the next division, world ranking and the full ladder */
+.tab>span .rank-badge { display:block; width:1.4em; height:1.4em }
+.rank-badge { flex:none; overflow:visible; filter:drop-shadow(0 3px 0 #1c2a6e) }
+.rank-hero { display:flex; align-items:center; justify-content:center; gap:18px; margin-top:10px }
+.rank-info { display:flex; flex-direction:column; align-items:flex-start; gap:6px }
+.rank-info>b { font-size:34px }
+.rank-info small { font-weight:800; color:#fff; text-shadow:0 2px 0 #1c2a6e99 }
+.rank-tabs { margin-top:14px }
+.rank-list { margin-top:12px }
+.rank-note { margin:14px 0; font-weight:800; color:#fff; text-align:center }
+.rank-join { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:4px 14px; margin:6px 0 10px; color:#fff; font-weight:800; text-align:center }
+.rank-join p { margin:0 }
+.world-ranking { margin:6px 0 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:6px }
+.world-ranking li { display:flex; align-items:center; gap:10px; padding:4px 14px 4px 8px; border:3px solid var(--ink); border-radius:18px; background:#fff; color:var(--ink) }
+.world-ranking li.me { background:linear-gradient(#fff6a8,var(--yellow)) }
+.world-ranking .place { min-width:30px; font:20px var(--display); text-align:center }
+.world-ranking li:nth-child(-n+3) .place { color:#e09a00; -webkit-text-stroke:1px var(--ink) }
+.world-ranking b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:18px var(--display) }
+.world-ranking .points { font:18px var(--display) }
+.ladder-row { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:6px }
+.ladder-tier { display:flex; flex-direction:column; align-items:center; padding:6px 4px; border:3px solid var(--ink); border-radius:16px; background:#ffffffe6; color:var(--ink) }
+.ladder-tier b { font:16px var(--display) }
+.ladder-tier small { font-weight:800; opacity:.8 }
+.ladder-tier.current { background:linear-gradient(#fff6a8,var(--yellow)); box-shadow:0 0 0 3px #fff }
+.ladder-tier.locked .rank-badge { filter:grayscale(.3) opacity(.75) drop-shadow(0 3px 0 #1c2a6e) }
+.rank-result { display:flex; align-items:center; justify-content:center; gap:10px; margin:6px 0 2px; font:20px var(--display) }
+.rank-result span { display:flex; flex-direction:column; align-items:flex-start; line-height:1.15 }
+.rank-up { color:#8ff067 } .rank-down { color:#ffb3c0 }
+@media(orientation:landscape) and (max-height:560px) {
+  .rank-hero { margin-top:4px } .rank-emblem svg { width:80px; height:80px } .rank-info>b { font-size:26px }
+  .ladder-tier svg { width:42px; height:42px } .ladder-tier b { font-size:14px }
+}
