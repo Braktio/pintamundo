@@ -107,6 +107,22 @@ Hay **10 rangos con 3 niveles cada uno** (30 en total): Bronce, Plata, Oro, Plat
 
 La pestaña **Rangos** muestra tu emblema, el avance al siguiente nivel, la escalera completa y el **ranking mundial**: los 50 jugadores con más copas. Para aparecer en él hay que entrar con Google. Cada jugador tiene una fila pública en Firestore, `ranking/{uid}` (nombre, copas y personaje), que se actualiza al abrir el juego con la sesión iniciada, al cambiar de nombre y al terminar cada partida. Quien nunca ha entrado con Google no tiene fila: en Firestore solo existen los jugadores con cuenta. Las reglas de `firestore.rules` dejan leerla a cualquiera y escribir solo la propia. Como las copas se calculan en el teléfono, alguien con conocimientos podría inflarlas; para evitarlo habría que calcularlas en el servidor.
 
+## Misiones diarias, racha y avisos
+
+- **Misiones:** 3 al día, iguales para todos (`missionsFor` elige según la fecha local), entre jugar partidas, atrapar rivales, pintar un porcentaje, recoger estrellas, usar poderes, jugar en línea y ganar. Cada una da estrellas al reclamarla, y completar las tres da un cofre raro. Cambian a medianoche.
+- **Racha:** un premio al día durante 7 días seguidos (100, 150 ⭐, cofre común, 250, cofre raro, 400 y cofre épico), y después vuelve a empezar. Si faltas un día, empieza de nuevo en el día 1.
+- El botón **Misiones diarias** del inicio muestra un punto rojo cuando hay algo por reclamar.
+- **Avisos (solo en la APK, `@capacitor/local-notifications`):** tras la primera partida se pide permiso una vez. Al salir de la app se programan en el propio teléfono el aviso del cofre gratis y, a las 19:00, el de la racha.
+
+## Invitar y emotes
+
+- En una sala de amigos, **📤 Invitar** comparte un enlace `https://braktio.github.io/pintamundo/?sala=GATO42` (con `@capacitor/share` en la APK, el menú de compartir del navegador o el portapapeles). Al abrirlo, el juego entra en esa sala en cuanto el jugador tiene nombre.
+- En las partidas en línea, el botón 😀 muestra 6 emotes. El servidor los reenvía a la sala (como mucho uno cada 1,5 s por jugador y solo de la lista) y aparecen en una burbuja sobre el personaje. No hay chat.
+
+## Privacidad
+
+`privacy.html` (https://braktio.github.io/pintamundo/privacy.html) explica qué datos se usan y cómo borrarlos; se enlaza desde la cuenta. En **☁️ Cuenta de Google → Borrar mis datos de la nube** se eliminan `users/{uid}` y `ranking/{uid}`; el progreso del teléfono se conserva.
+
 ## Música
 
 `music.js` genera en tiempo real una pista cartoon de 16 compases a 124 BPM (melodía, acordes, bajo y percusión) con Web Audio. Suena en el menú y en las partidas cuando el sonido está activado; el botón de sonido controla a la vez la música y los efectos. El juego recuerda la elección; como los navegadores solo permiten sonar tras un toque, la música empieza con el primer toque. Se detiene al cambiar de pestaña o salir de la app.

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pintamundo · Política de privacidad</title>
+  <link rel="icon" href="favicon.ico">
+  <style>
+    @font-face { font-family:'Baloo 2'; font-weight:500; src:url(fonts/baloo-2-latin-500-normal.woff2) format('woff2') }
+    @font-face { font-family:'Baloo 2'; font-weight:700; src:url(fonts/baloo-2-latin-700-normal.woff2) format('woff2') }
+    @font-face { font-family:'Lilita One'; src:url(fonts/lilita-one-latin-400-normal.woff2) format('woff2') }
+    :root { --ink:#1c2a6e; --blue:#2d7bff; --paper:#ffffff; --text:#1c2a6e; --muted:#4b5a99; --bg:#eaf2ff }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --paper:#18224f; --text:#eef3ff; --muted:#b9c6f2; --bg:#0f1738 } }
+    :root[data-theme="dark"] { --paper:#18224f; --text:#eef3ff; --muted:#b9c6f2; --bg:#0f1738 }
+    * { box-sizing:border-box }
+    body { margin:0; padding:24px 16px 48px; background:var(--bg); color:var(--text); font:17px/1.55 'Baloo 2', system-ui, sans-serif }
+    main { max-width:760px; margin:0 auto; padding:24px 22px; border:4px solid var(--ink); border-radius:24px; background:var(--paper); box-shadow:0 6px 0 var(--ink) }
+    h1 { margin:0 0 4px; font:normal 34px/1.1 'Lilita One', sans-serif; color:var(--blue) }
+    h2 { margin:26px 0 6px; font:normal 22px 'Lilita One', sans-serif }
+    p, li { margin:6px 0 }
+    .updated { margin:0; color:var(--muted); font-weight:700 }
+    a { color:var(--blue); font-weight:700 }
+    table { width:100%; table-layout:fixed; border-collapse:collapse; margin:8px 0; font-size:15px; overflow-wrap:anywhere }
+    th, td { padding:6px 8px; border:2px solid var(--ink); text-align:left; vertical-align:top }
+    th { background:#2d7bff22 }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Política de privacidad</h1>
+  <p class="updated">Pintamundo · Última actualización: 23 de octubre de 2026</p>
+
+  <p>Pintamundo es un juego para Android y navegador. Esta política explica qué datos usa el juego, para qué y cómo puedes borrarlos. No vendemos tus datos ni los usamos para publicidad personalizada propia.</p>
+
+  <h2>Qué datos usamos</h2>
+  <table>
+    <tr><th>Dato</th><th>Para qué</th><th>Dónde se guarda</th></tr>
+    <tr><td>Tu progreso: nivel, estrellas, cofres, personajes, misiones y copas</td><td>Que no pierdas tu partida</td><td>En tu teléfono o navegador. Si conectas tu cuenta, también en la nube (Firebase, de Google)</td></tr>
+    <tr><td>El nombre que eliges en el juego</td><td>Que los demás te vean en las partidas en línea y en el ranking</td><td>En tu teléfono y, con cuenta, en la nube</td></tr>
+    <tr><td>Un identificador de tu cuenta de Google (solo si la conectas)</td><td>Saber qué progreso es tuyo y recuperarlo en otro teléfono</td><td>Firebase Authentication. No guardamos tu correo ni tu contraseña</td></tr>
+    <tr><td>Tu fila del ranking mundial: nombre, copas y personaje (solo con cuenta)</td><td>Mostrar el ranking a todos los jugadores</td><td>Firebase. Es pública: cualquiera que juegue puede verla</td></tr>
+    <tr><td>Lo que haces en una partida en línea: movimientos, poderes y emotes</td><td>Que la partida funcione</td><td>Solo mientras dura la partida, en nuestro servidor (Render). No se guarda después</td></tr>
+  </table>
+  <p>El juego no tiene chat. Los emotes son símbolos de una lista fija.</p>
+
+  <h2>Servicios de terceros</h2>
+  <ul>
+    <li><b>Google Firebase</b> (inicio de sesión y base de datos): <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">privacidad de Firebase</a>.</li>
+    <li><b>Render</b> aloja el servidor de las partidas en línea. Como cualquier servidor web, puede registrar la dirección IP de las conexiones durante un tiempo limitado: <a href="https://render.com/privacy" target="_blank" rel="noopener">privacidad de Render</a>.</li>
+    <li><b>Google AdMob</b>, si la app muestra anuncios: puede usar identificadores del dispositivo para mostrar y medir anuncios. Los anuncios con recompensa solo aparecen cuando tú decides verlos. <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">Cómo usa Google los datos de los anuncios</a>.</li>
+  </ul>
+
+  <h2>Notificaciones</h2>
+  <p>En Android, si das permiso, el juego programa en tu propio teléfono avisos como «tu cofre gratis está listo» o «no pierdas tu racha». No se envían datos para eso.</p>
+
+  <h2>Cómo borrar tus datos</h2>
+  <ul>
+    <li><b>En la nube:</b> en el juego, ve a <b>Progreso → ☁️ Cuenta de Google → Borrar mis datos de la nube</b>. Se borran tu progreso guardado y tu fila del ranking.</li>
+    <li><b>En tu teléfono:</b> desinstala la app o borra sus datos desde los ajustes de Android. En el navegador, borra los datos del sitio.</li>
+    <li>También puedes pedirlo escribiendo en <a href="https://github.com/Braktio/pintamundo/issues" target="_blank" rel="noopener">github.com/Braktio/pintamundo/issues</a>.</li>
+  </ul>
+
+  <h2>Edad</h2>
+  <p>Pintamundo tiene un estilo de dibujos animados, pero no está dirigido a menores de 13 años. Para conectar una cuenta de Google hay que cumplir la edad mínima que Google exige en tu país.</p>
+
+  <h2>Cambios y contacto</h2>
+  <p>Si esta política cambia, actualizaremos esta página y su fecha. Para cualquier pregunta, escribe en <a href="https://github.com/Braktio/pintamundo/issues" target="_blank" rel="noopener">github.com/Braktio/pintamundo/issues</a>.</p>
+</main>
+</body>
+</html>

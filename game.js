@@ -497,6 +497,7 @@ function enterMatch() {
   $('pilot-name').textContent = profile.name || 'Tú';
   $('leaders').innerHTML = arena.actors.map(actor => `<li data-actor="${actor.id}" class="${actor.id ? '' : 'me'}" style="--actor:${actor.color}"><img src="${renderer.portraitURL(actor)}" alt="${actor.name}"><i></i><b>0%</b></li>`).join('');
   $('timer-pill').hidden = !mirror;
+  $('emote').hidden = !mirror; $('emote-bar').hidden = true;
   // Solo matches go on to 100% (half is already a victory); online ones end at half.
   goal = mirror ? 50 : 100;
   $('goal-bar').setAttribute('aria-label', mirror ? 'Meta: pintar la mitad del mapa' : 'Meta: pintar todo el mapa');
@@ -556,6 +557,7 @@ function end(won, reason, ranking = null) {
   const completed = recordMatch(profile, today(), { kills: player.kills, percent, orbs: matchStats.orbs, powers: matchStats.powers, online: !!mirror, won });
   save(true); publishRank();
   for (const mission of completed) toast(`✅ Misión cumplida: ${mission.text}. ¡Reclámala en Misiones!`);
+  void askNotifications();
   const currentGeneration = generation;
   setTimeout(() => {
     if (currentGeneration !== generation) return;
@@ -889,7 +891,7 @@ function editName(first = false, suggestion = '') {
   $('name-save').onclick = () => {
     const name = cleanName(input.value);
     if (!name) { toast('Tu nombre necesita de 3 a 14 letras o números.'); input.focus(); return; }
-    profile.name = name; save(true); publishRank(); renderMenu(); $('dialog').close();
+    profile.name = name; save(true); publishRank(); renderMenu(); $('dialog').close(); followInvite();
     if (first) toast(`¡Hola, ${name}! 🎨`);
   };
   input.onkeydown = event => { if (event.key === 'Enter') $('name-save').click(); };
@@ -904,11 +906,12 @@ function renderAccount() {
 }
 function openAccount() {
   if (account) {
-    dialog(`<p class="eyebrow">☁️ Tu cuenta</p><h2>Conectado con Google</h2><p>Tu progreso se guarda en la nube. Entra con la misma cuenta en otro teléfono para seguir jugando.</p><div class="dialog-buttons"><button id="account-sync" class="dialog-button">🔄 Sincronizar ahora</button><button id="account-out" class="dialog-button secondary">🚪 Cerrar sesión</button><button id="account-close" class="dialog-button secondary">Cerrar</button></div>`);
+    dialog(`<p class="eyebrow">☁️ Tu cuenta</p><h2>Conectado con Google</h2><p>Tu progreso se guarda en la nube. Entra con la misma cuenta en otro teléfono para seguir jugando.</p><div class="dialog-buttons"><button id="account-sync" class="dialog-button">🔄 Sincronizar ahora</button><button id="account-out" class="dialog-button secondary">🚪 Cerrar sesión</button><button id="account-close" class="dialog-button secondary">Cerrar</button></div><p class="account-links"><a href="${PRIVACY_URL}" target="_blank" rel="noopener">Política de privacidad</a> · <button id="account-delete" class="link-button">Borrar mis datos de la nube</button></p>`);
     $('account-sync').onclick = async () => { $('dialog').close(); await syncWithCloud(false); toast('☁️ Progreso sincronizado.'); };
     $('account-out').onclick = signOut;
+    $('account-delete').onclick = confirmDeleteData;
   } else {
-    dialog(`<p class="eyebrow">☁️ Guardar en mi cuenta</p><h2>¡No pierdas tu progreso!</h2><p>Conecta tu cuenta de Google para guardar tu progreso en la nube y recuperarlo en otro teléfono.</p><div class="dialog-buttons login-buttons"><button id="login-google" class="dialog-button login google">Continuar con Google</button><button id="account-close" class="dialog-button secondary">Ahora no</button></div>`);
+    dialog(`<p class="eyebrow">☁️ Guardar en mi cuenta</p><h2>¡No pierdas tu progreso!</h2><p>Conecta tu cuenta de Google para guardar tu progreso en la nube y recuperarlo en otro teléfono.</p><div class="dialog-buttons login-buttons"><button id="login-google" class="dialog-button login google">Continuar con Google</button><button id="account-close" class="dialog-button secondary">Ahora no</button></div><p class="account-links">Al conectarte aceptas la <a href="${PRIVACY_URL}" target="_blank" rel="noopener">política de privacidad</a>.</p>`);
     $('login-google').onclick = signIn;
   }
   $('account-close').onclick = () => $('dialog').close();
@@ -925,6 +928,20 @@ async function signIn() {
   if (screen === 'ranks') void loadLeaderboard(true);
   toast('☁️ Conectado con Google.');
   if (!profile.name && state === 'menu' && !$('dialog').open) editName(true, cleanName(account.name.split(' ')[0]));
+}
+// Removes the saved profile and the ranking row from the cloud, after confirming, and signs out.
+// The progress on this phone stays.
+function confirmDeleteData() {
+  dialog('<p class="eyebrow">☁️ Tu cuenta</p><h2>¿Borrar tus datos de la nube?</h2><p>Se borrarán tu progreso guardado en la nube y tu puesto en el ranking mundial. Lo que tienes en este teléfono no se borra.</p><div class="dialog-buttons"><button id="delete-yes" class="dialog-button danger-button">🗑️ Sí, borrar</button><button id="delete-no" class="dialog-button secondary">Cancelar</button></div>');
+  $('delete-no').onclick = openAccount;
+  $('delete-yes').onclick = async () => {
+    $('dialog').close();
+    try { await cloud.deleteData(account.uid); } catch { toast('No se pudieron borrar los datos. Revisa tu conexión.'); return; }
+    leaderboard.at = 0; cloudDirty = false;
+    try { await cloud.signOut(); } catch { /* The local session is dropped anyway. */ }
+    account = null; renderAccount(); renderMenu();
+    toast('🗑️ Tus datos de la nube se borraron. Tu progreso sigue en este teléfono.');
+  };
 }
 async function signOut() {
   $('dialog').close();
@@ -991,6 +1008,80 @@ async function restoreAccount() {
   publishRank();
 }
 
+// ---------- Invite friends ----------
+// A private room is shared as a link to the web game that joins it straight away
+// (https://…/?sala=GATO42). The Android app shares the same link.
+const WEB_GAME = 'https://braktio.github.io/pintamundo/', PRIVACY_URL = WEB_GAME + 'privacy.html';
+async function invite(code) {
+  const room = code.replace(/[^A-Z0-9]/gi, ''), url = `${WEB_GAME}?sala=${room}`;
+  const text = `¡Juega conmigo a Pintamundo! 🎨 Mi sala es ${code}: ${url}`;
+  try {
+    const Share = globalThis.Capacitor?.Plugins?.Share;
+    if (nativeApp && Share) { await Share.share({ title: 'Pintamundo', text, url, dialogTitle: 'Invitar a la sala' }); return; }
+    if (navigator.share) { await navigator.share({ title: 'Pintamundo', text, url }); return; }
+    await navigator.clipboard.writeText(text); toast('📋 Enlace copiado. ¡Pégalo a tus amigos!');
+  } catch { /* Sharing was cancelled. */ }
+}
+// A link with ?sala= opens the online game and joins that room once the player has a name.
+let pendingRoom = new URLSearchParams(location.search).get('sala') || '';
+if (pendingRoom) history.replaceState(null, '', location.pathname);
+function followInvite() {
+  if (!pendingRoom || !profile.name || state !== 'menu') return;
+  const code = pendingRoom; pendingRoom = '';
+  toast(`🚪 Entrando a la sala ${code}…`); void joinOnline('join', code);
+}
+
+// ---------- Quick emotes (online, no chat) ----------
+const EMOTES = ['😂', '👍', '😡', '😱', '🥳', '👋'];
+let emotes = [];
+function showEmote(id, index) {
+  const actor = arena.actors[id]; if (!actor || !EMOTES[index]) return;
+  const el = document.createElement('div'); el.className = 'emote-bubble'; el.innerHTML = `<span>${EMOTES[index]}</span>`;
+  $('hud').append(el); emotes.push({ el, id, until: performance.now() + 2200 });
+}
+// Bubbles follow their player on screen and disappear after a couple of seconds.
+function placeEmotes(time) {
+  emotes = emotes.filter(e => { if (time < e.until && state === 'playing') return true; e.el.remove(); return false; });
+  for (const e of emotes) { const actor = arena.actors[e.id], at = renderer.project(actor.x, actor.y); e.el.style.transform = `translate(${at.x}px, ${at.y - 54}px) translate(-50%, -50%)`; }
+}
+$('emote').onclick = () => { $('emote-bar').hidden = !$('emote-bar').hidden; };
+$('emote-bar').innerHTML = EMOTES.map((emoji, i) => `<button data-emote="${i}" aria-label="Emote ${emoji}">${emoji}</button>`).join('');
+$('emote-bar').onclick = event => {
+  const button = event.target.closest('[data-emote]'); if (!button || !online) return;
+  online.connection.send({ t: 'emote', e: Number(button.dataset.emote) }); $('emote-bar').hidden = true;
+};
+
+// ---------- Reminders (Android app) ----------
+// Local notifications: when the free chest is ready, and in the evening to keep the daily
+// streak. They are set again every time the app goes to the background.
+const Notify = globalThis.Capacitor?.Plugins?.LocalNotifications;
+const NOTIFY_KEY = 'pintamundo.notify.asked';
+// Asked once, after a first match, when the reminders make sense to the player.
+async function askNotifications() {
+  if (!nativeApp || !Notify) return;
+  try {
+    if (localStorage.getItem(NOTIFY_KEY)) return;
+    localStorage.setItem(NOTIFY_KEY, '1');
+    const { display } = await Notify.checkPermissions();
+    if (display !== 'granted') await Notify.requestPermissions();
+  } catch { /* Without permission there are simply no reminders. */ }
+}
+async function scheduleReminders() {
+  if (!nativeApp || !Notify) return;
+  try {
+    if ((await Notify.checkPermissions()).display !== 'granted') return;
+    await Notify.cancel({ notifications: [{ id: 1 }, { id: 2 }] });
+    const list = [], evening = new Date(), claimed = streakStatus(profile, today()).claimed;
+    evening.setHours(19, 0, 0, 0);
+    if (claimed || evening <= new Date()) evening.setDate(evening.getDate() + 1);
+    if (profile.freeChestAt > Date.now()) list.push({ id: 1, title: '🎁 ¡Tu cofre gratis está listo!', body: 'Entra a Pintamundo y ábrelo.', schedule: { at: new Date(profile.freeChestAt), allowWhileIdle: true } });
+    const days = profile.streak.count;
+    list.push({ id: 2, title: days ? `🔥 ¡Racha de ${days} ${days === 1 ? 'día' : 'días'}!` : '🎨 ¡Tu premio diario te espera!', body: days ? 'Juega hoy para no perderla y reclama tu premio diario.' : 'Reclama tu premio diario y completa las misiones de hoy.', schedule: { at: evening, allowWhileIdle: true } });
+    await Notify.schedule({ notifications: list });
+  } catch { /* Reminders are a convenience. */ }
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) void scheduleReminders(); });
+
 // ---------- Online play ----------
 // Players are shown with their nickname and character. There is no chat.
 function openOnline() {
@@ -1047,6 +1138,7 @@ function onServerMessage(message) {
     return;
   }
   if (message.t === 'start') { startOnline(message); return; }
+  if (message.t === 'emote') { if (mirror) showEmote(mirror.map(message.a), message.e); return; }
   if (message.t === 'error') { toast(message.message); if (state === 'lobby') { state = 'menu'; $('dialog').close(); } }
 }
 function showLobby(message) {
@@ -1055,7 +1147,8 @@ function showLobby(message) {
   const players = message.players.map(p => `<li class="${p.you ? 'you' : ''}"><img src="${renderer.portraitURL({ skin: p.skin, color: p.color }, 72)}" alt=""><b>${p.you ? 'Tú' : p.name}</b>${p.host ? '<span>👑</span>' : ''}</li>`).join('');
   const empty = Array.from({ length: message.max - message.players.length }, () => '<li class="empty"><span class="robot" aria-hidden="true">🤖</span><b>Robot</b></li>').join('');
   const status = !message.private ? `<p class="lobby-status">Empieza en <b>${message.startsIn}</b> s…</p>` : message.host ? '<p class="lobby-status">Cuando estén todos, pulsa empezar.</p>' : '<p class="lobby-status">Esperando a que 👑 empiece la partida…</p>';
-  dialog(`<p class="eyebrow">${message.private ? '👫 Sala de amigos' : '⚡ Jugar rápido'}</p>${message.private ? `<p class="lobby-hint">Comparte este código:</p><div class="room-code">${message.code}</div>` : '<h2>¡Buscando jugadores!</h2>'}<ul class="lobby-players">${players}${empty}</ul>${status}<div class="dialog-buttons">${message.private && message.host ? '<button id="lobby-start" class="dialog-button">¡EMPEZAR! ▶</button>' : ''}<button id="lobby-leave" class="dialog-button secondary">🚪 Salir</button></div>`);
+  dialog(`<p class="eyebrow">${message.private ? '👫 Sala de amigos' : '⚡ Jugar rápido'}</p>${message.private ? `<p class="lobby-hint">Comparte este código:</p><div class="room-code">${message.code}</div>` : '<h2>¡Buscando jugadores!</h2>'}<ul class="lobby-players">${players}${empty}</ul>${status}<div class="dialog-buttons">${message.private && message.host ? '<button id="lobby-start" class="dialog-button">¡EMPEZAR! ▶</button>' : ''}${message.private ? '<button id="lobby-invite" class="dialog-button secondary">📤 Invitar</button>' : ''}<button id="lobby-leave" class="dialog-button secondary">🚪 Salir</button></div>`);
+  if ($('lobby-invite')) $('lobby-invite').onclick = () => invite(message.code);
   if ($('lobby-start')) $('lobby-start').onclick = () => online.connection.send({ t: 'start' });
   $('lobby-leave').onclick = menu;
 }
@@ -1098,10 +1191,11 @@ function frame(time) {
   if (!document.hidden && state !== 'menu') renderer.draw(arena, time / 1000, dt);
   else if (!document.hidden && screen === 'home') renderer.portrait($('mascot'), { skin: profile.skin, color: playerColor() }, time / 1000, { idle: true });
   if (time > announcedUntil) $('announcement').hidden = true;
+  if (emotes.length) placeEmotes(time);
   requestAnimationFrame(frame);
 }
 showScreen('home'); requestAnimationFrame(frame);
 if (storageError) toast('No se pudo cargar tu progreso de este teléfono.');
 // The cloud copy is checked first, so a returning player is not asked for a new name;
 // a slow network only delays the question by two seconds.
-Promise.race([restoreAccount(), new Promise(resolve => setTimeout(resolve, 2000))]).finally(() => { if (!profile.name && state === 'menu' && !$('dialog').open) editName(true); });
+Promise.race([restoreAccount(), new Promise(resolve => setTimeout(resolve, 2000))]).finally(() => { if (!profile.name && state === 'menu' && !$('dialog').open) editName(true); else followInvite(); });

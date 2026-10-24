@@ -66,6 +66,11 @@ try {
   await ana.evaluate('document.getElementById("lobby-start").click()');
   await sleep(1200);
   for (const p of [ana, beto]) assert.equal(await p.evaluate('document.getElementById("hud").hidden'), false, 'both phones are in the match');
+  // Quick emotes: Ana taps one and Beto sees it over her character.
+  assert.equal(await ana.evaluate('document.getElementById("emote").hidden'), false, 'online matches show the emote button');
+  await ana.evaluate('document.getElementById("emote").click(); document.querySelectorAll("[data-emote]")[4].click()');
+  await sleep(400);
+  assert.match(await beto.evaluate('document.querySelector(".emote-bubble")?.textContent || ""'), /🥳/, 'the other phone shows the emote');
   // Beto steers right with the keyboard; Ana must see Beto's character move.
   const before = await ana.evaluate('(() => { const r = document.querySelectorAll("#leaders li"); return r.length; })()');
   assert.equal(before, 7);

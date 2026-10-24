@@ -50,7 +50,7 @@ test('private rooms: friends join by code, only the host starts, bad input is ig
   const hub = new Hub({ tickMs: 20, matchSeconds: 30 });
   try {
     const host = phone(hub), friend = phone(hub), stranger = phone(hub);
-    host.send({ t: 'create', skin: 'not-a-character', color: 'red' });
+    host.send({ t: 'create', skin: 'not-a-character', color: 'red', level: 4 });
     const code = host.last('lobby').code;
     assert.match(code, /^[A-Z]+-\d\d$/);
     assert.equal(host.last('lobby').players[0].skin, 'interceptor', 'unknown characters fall back to the starter');
@@ -64,6 +64,10 @@ test('private rooms: friends join by code, only the host starts, bad input is ig
     host.send({ t: 'start' });
     await sleep(60);
     assert.ok(friend.last('start'));
+    // Quick emotes reach everyone in the room, at most one every 1.5 s, only from the list.
+    host.send({ t: 'emote', e: 2 }); host.send({ t: 'emote', e: 3 }); host.send({ t: 'emote', e: 99 });
+    assert.deepEqual(friend.inbox.filter(m => m.t === 'emote').map(m => m.e), [2]);
+    assert.equal(friend.last('emote').a, host.last('start').you);
     for (const junk of ['not json', '{"t":5}', JSON.stringify({ t: 'input', a: 'left' }), JSON.stringify({ t: 'power', s: 9 })]) friend.send(typeof junk === 'string' && junk.startsWith('{') ? JSON.parse(junk) : junk);
     friend.close();
     await sleep(60);

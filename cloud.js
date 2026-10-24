@@ -68,6 +68,13 @@ export async function topPlayers(limit = 50) {
   const result = await store.getDocs(store.query(store.collection(db, 'ranking'), store.orderBy('points', 'desc'), store.limit(limit)));
   return result.docs.map(d => ({ uid: d.id, ...d.data() }));
 }
+// Deletes everything the cloud keeps for this player: the saved profile and the ranking row.
+export async function deleteData(uid) {
+  for (const reference of [`users/${uid}`, `ranking/${uid}`]) {
+    if (nativeApp) await Store.deleteDocument({ reference });
+    else { const { store, db } = await loadWeb(); await store.deleteDoc(store.doc(db, ...reference.split('/'))); }
+  }
+}
 export async function upload(uid, profile, level) {
   const data = { profile: JSON.stringify(profile), updatedAt: profile.updatedAt, name: profile.name, level };
   if (nativeApp) await Store.setDocument({ reference: `users/${uid}`, data });

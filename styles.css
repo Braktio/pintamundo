@@ -614,3 +614,17 @@ body.in-match { touch-action:none; overscroll-behavior:none }
 .mission-bonus { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:10px; font-weight:800 }
 .mission-bonus.claimed { opacity:.7 }
 .mission-bonus .dialog-button { min-height:44px; padding:4px 14px; font-size:16px }
+
+/* Quick emotes in online matches */
+.emote-bar { display:flex; gap:4px; padding:5px; border:4px solid var(--ink); border-radius:20px; background:#fff; box-shadow:0 4px 0 var(--ink); pointer-events:auto }
+.emote-bar[hidden] { display:none }
+.emote-bar button { width:46px; height:46px; padding:0; border:0; border-radius:14px; background:none; font-size:28px }
+.emote-bar button:active { background:#dbe7ff }
+.emote-bubble { position:absolute; left:0; top:0; z-index:4; display:grid; place-items:center; width:58px; height:58px; border:4px solid var(--ink); border-radius:50%; background:#fff; font-size:32px; box-shadow:0 4px 0 var(--ink); pointer-events:none }
+.emote-bubble span { animation:pop-in .3s cubic-bezier(.2,1.6,.4,1) }
+
+/* Account dialog: privacy link and cloud data deletion */
+.account-links { margin:14px 0 0; font-size:15px; font-weight:800 }
+.account-links a,.link-button { color:#fff6a8; text-decoration:underline }
+.link-button { padding:0; border:0; background:none; font:inherit; cursor:pointer }
+.dialog-button.danger-button { background:linear-gradient(#ff8aa0,var(--red)) }

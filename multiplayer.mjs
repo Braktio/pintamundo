@@ -10,6 +10,8 @@ const WORDS = ['GATO', 'PATO', 'SAPO', 'LUNA', 'NUBE', 'OSO', 'PEZ', 'SOL', 'RAN
 // Bits of the per-actor flag field in state messages.
 export const FLAG_POWERS = ['dash', 'shield', 'ghost', 'paint', 'magnet'];
 export const FROZEN = 32, WALL = 64, HUMAN = 128;
+// Number of quick emotes the phones can show (EMOTES in game.js).
+export const EMOTES = 6;
 const validSkin = id => CHARACTERS.some(c => c.id === id) ? id : CHARACTERS[0].id;
 // The phone reports its character's level (1–10); anything else counts as level 1.
 const validLevel = level => Number.isInteger(level) && level >= 1 && level <= CHARACTER_MAX_LEVEL ? level : 1;
@@ -136,6 +138,13 @@ class Room {
     const id = this.ids?.get(client), actor = id === undefined ? null : this.arena?.actors[id];
     if (actor?.alive && actor.human && Number.isFinite(angle)) actor.desired = angle;
   }
+  // Quick emotes (no chat): a number from a fixed list, at most one every 1.5 s per player.
+  emote(client, index) {
+    const id = this.ids?.get(client), now = Date.now();
+    if (id === undefined || !Number.isInteger(index) || index < 0 || index >= EMOTES || now - (client.emoteAt || 0) < 1500) return;
+    client.emoteAt = now;
+    for (const member of this.members) this.hub.send(member, { t: 'emote', a: id, e: index });
+  }
   power(client, slot) {
     const id = this.ids?.get(client), actor = id === undefined ? null : this.arena?.actors[id];
     if (actor?.alive && actor.human && (slot === 0 || slot === 1) && actor.powers[slot]) this.arena.ability(id, actor.powers[slot]);
@@ -170,6 +179,7 @@ export class Hub {
     else if (data.t === 'ping') { if (Number.isFinite(data.c)) this.send(client, { t: 'pong', c: data.c }); }
     else if (data.t === 'input') client.room?.input(client, data.a);
     else if (data.t === 'power') client.room?.power(client, data.s);
+    else if (data.t === 'emote') client.room?.emote(client, data.e);
   }
   open(isPrivate) {
     if (this.rooms.size >= this.options.maxRooms) return null;
