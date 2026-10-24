@@ -406,7 +406,7 @@ function showScreen(name) {
   $('play').setAttribute('aria-label', name === 'home' ? '¡A jugar!' : 'Volver al inicio');
   document.querySelector('.screens').scrollTop = 0;
   renderMenu();
-  if (name === 'ranks') { void loadLeaderboard(); suggestRankLogin(); }
+  if (name === 'ranks') { void loadLeaderboard(true); void refreshTrophies(); friendsBoard.at = 0; suggestRankLogin(); }
 }
 document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () => showScreen(button.dataset.tab));
 $('hangar-items').onclick = event => {
@@ -820,6 +820,7 @@ function onTrophies(message) {
   for (const friend of message.friends || []) if (friend.uid !== account?.uid && !profile.friends.some(f => f.uid === friend.uid)) profile.friends.unshift({ uid: friend.uid, name: cleanName(friend.name) || 'Amigo' });
   profile.friends = profile.friends.slice(0, 50);
   save(true); leaderboard.at = 0; friendsBoard.at = 0;
+  if (screen === 'ranks') void loadLeaderboard(true);
   const after = rankFor(profile.points);
   if ($('match-trophies')) $('match-trophies').outerHTML = rankResult(before, after, message.change);
   else toast(`🏆 ${message.change >= 0 ? '+' : ''}${message.change} copas · ${after.name}`);
@@ -853,10 +854,12 @@ function suggestRankLogin() {
   $('rank-suggest-later').onclick = () => $('dialog').close();
 }
 let rankTab = 'global', leaderboard = { status: 'idle', rows: [], at: 0 }, friendsBoard = { status: 'idle', rows: [], at: 0 };
+// Ranking reads give up after 10 s, so a stalled connection never blocks the next try.
+const timed = promise => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))]);
 async function loadLeaderboard(force = false) {
   if (!cloud.available || leaderboard.status === 'loading' || (!force && leaderboard.status === 'ok' && Date.now() - leaderboard.at < 60000)) return;
   leaderboard.status = 'loading'; renderRanks();
-  try { leaderboard = { status: 'ok', rows: await cloud.topPlayers(season, 50), at: Date.now() }; }
+  try { leaderboard = { status: 'ok', rows: await timed(cloud.topPlayers(season, 50)), at: Date.now() }; }
   catch { leaderboard = { status: 'error', rows: [], at: 0 }; }
   renderRanks();
 }
@@ -865,7 +868,7 @@ async function loadFriends(force = false) {
   if (!account || friendsBoard.status === 'loading' || (!force && friendsBoard.status === 'ok' && Date.now() - friendsBoard.at < 60000)) return;
   friendsBoard.status = 'loading'; renderRanks();
   try {
-    const rows = await cloud.seasonRows(season, [account.uid, ...profile.friends.map(f => f.uid)]);
+    const rows = await timed(cloud.seasonRows(season, [account.uid, ...profile.friends.map(f => f.uid)]));
     for (const friend of profile.friends) if (!rows.some(r => r.uid === friend.uid)) rows.push({ uid: friend.uid, name: friend.name, points: 0, skin: 'interceptor' });
     if (!rows.some(r => r.uid === account.uid)) rows.push({ uid: account.uid, name: profile.name, points: profile.points, skin: profile.skin });
     friendsBoard = { status: 'ok', rows: rows.sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0)), at: Date.now() };
@@ -908,9 +911,11 @@ function renderRanks() {
     : leaderboard.status === 'error' ? '<p class="rank-note">No pudimos cargar el ranking. Revisa tu conexión.</p><div class="dialog-buttons"><button id="rank-retry" class="dialog-button secondary">🔄 Reintentar</button></div>'
     : !leaderboard.rows.length ? '<p class="rank-note">Todavía no hay nadie. ¡Sé el primero!</p>'
     : rankingList(leaderboard.rows);
-  $('rank-list').innerHTML = join + body;
+  const refresh = leaderboard.status === 'ok' ? '<div class="dialog-buttons"><button id="rank-refresh" class="dialog-button secondary">🔄 Actualizar</button></div>' : '';
+  $('rank-list').innerHTML = join + body + refresh;
   if ($('rank-login')) $('rank-login').onclick = signIn;
   if ($('rank-retry')) $('rank-retry').onclick = () => loadLeaderboard(true);
+  if ($('rank-refresh')) $('rank-refresh').onclick = () => { void loadLeaderboard(true); void refreshTrophies(); };
 }
 // Friends: players met in private rooms while signed in.
 function renderFriends() {
