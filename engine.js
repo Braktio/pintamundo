@@ -122,6 +122,76 @@ export function rankChange({ stars, kills = 0, perfect = false, place = 0, playe
   if (players > 1 && place) change += place === 1 ? 8 : place <= 3 ? 3 : place === players ? -3 : 0;
   return change;
 }
+
+// Daily missions: three a day, the same for everyone, chosen from the day ("2026-10-23").
+// Each pays stars when claimed; claiming all three adds a bonus chest.
+export const MISSIONS = {
+  matches: { icon: '🎮', text: n => `Juega ${n} partidas`, goals: [2, 3, 4], reward: 60 },
+  kills: { icon: '🎯', text: n => `Atrapa a ${n} rivales`, goals: [2, 4, 6], reward: 90 },
+  paint: { icon: '🎨', text: n => `Pinta el ${n}% del mapa en una partida`, goals: [15, 25, 35], reward: 80 },
+  orbs: { icon: '⭐', text: n => `Recoge ${n} estrellas del mapa`, goals: [8, 15, 25], reward: 60 },
+  powers: { icon: '⚡', text: n => `Usa ${n} poderes`, goals: [4, 8, 12], reward: 60 },
+  online: { icon: '🌐', text: n => n > 1 ? `Juega ${n} partidas en línea` : 'Juega una partida en línea', goals: [1, 2], reward: 100 },
+  wins: { icon: '🏆', text: () => 'Pinta más de la mitad del mapa', goals: [1], reward: 150 }
+};
+export const MISSION_BONUS = 'raro';
+export function missionsFor(day) {
+  let seed = [...day].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0, 7);
+  const next = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0);
+  const ids = Object.keys(MISSIONS), picked = [];
+  while (picked.length < 3) {
+    const id = ids.splice(next() % ids.length, 1)[0], { goals, reward } = MISSIONS[id], goal = goals[next() % goals.length];
+    picked.push({ id, goal, reward, icon: MISSIONS[id].icon, text: MISSIONS[id].text(goal) });
+  }
+  return picked;
+}
+const freshDaily = day => ({ day, progress: {}, claimed: [], bonus: false });
+// Today's missions with their progress; a new day starts from zero.
+export function dailyMissions(profile, day) {
+  if (profile.daily?.day !== day) profile.daily = freshDaily(day);
+  return missionsFor(day).map(m => {
+    const have = Math.min(m.goal, profile.daily.progress[m.id] || 0);
+    return { ...m, have, done: have >= m.goal, claimed: profile.daily.claimed.includes(m.id) };
+  });
+}
+// Adds one finished match ({ kills, percent, orbs, powers, online, won }) to today's
+// missions and returns the ones it completed.
+export function recordMatch(profile, day, stats) {
+  const before = dailyMissions(profile, day), progress = profile.daily.progress;
+  const add = (id, value) => { progress[id] = (progress[id] || 0) + value; };
+  add('matches', 1); add('kills', stats.kills || 0); add('orbs', stats.orbs || 0); add('powers', stats.powers || 0);
+  add('online', stats.online ? 1 : 0); add('wins', stats.won ? 1 : 0);
+  progress.paint = Math.max(progress.paint || 0, Math.floor(stats.percent || 0));
+  return dailyMissions(profile, day).filter((m, i) => m.done && !before[i].done);
+}
+export function claimMission(profile, day, id) {
+  const mission = dailyMissions(profile, day).find(m => m.id === id);
+  if (!mission?.done || mission.claimed) return 0;
+  profile.daily.claimed.push(id); profile.bits += mission.reward;
+  return mission.reward;
+}
+export function claimMissionBonus(profile, day) {
+  if (profile.daily?.day !== day || profile.daily.bonus || !dailyMissions(profile, day).every(m => m.claimed)) return false;
+  profile.daily.bonus = true; profile.chests[MISSION_BONUS]++;
+  return true;
+}
+// Daily streak: one reward a day, better each day in a row, a week long and then again.
+// Missing a day starts over at day 1.
+export const STREAK_REWARDS = [{ bits: 100 }, { bits: 150 }, { chest: 'comun' }, { bits: 250 }, { chest: 'raro' }, { bits: 400 }, { chest: 'epico' }];
+export const addDays = (day, n) => new Date(Date.parse(day + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+export function streakStatus(profile, day) {
+  const { last = '', count = 0 } = profile.streak || {};
+  if (last === day) return { claimed: true, count, reward: STREAK_REWARDS[(count - 1) % STREAK_REWARDS.length] };
+  const next = last && addDays(last, 1) === day ? count + 1 : 1;
+  return { claimed: false, count: next, reward: STREAK_REWARDS[(next - 1) % STREAK_REWARDS.length] };
+}
+export function claimStreak(profile, day) {
+  const status = streakStatus(profile, day);
+  if (status.claimed) return null;
+  profile.streak = { last: day, count: status.count };
+  if (status.reward.bits) profile.bits += status.reward.bits; else profile.chests[status.reward.chest]++;
+  return status.reward;
+}
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const cell = (x, y) => Math.floor(y) * WIDTH + Math.floor(x);
 export const coords = index => ({ x: index % WIDTH + .5, y: Math.floor(index / WIDTH) + .5 });
@@ -145,7 +215,7 @@ export function crossedCells(x0, y0, x1, y1) {
 export const emptyChests = () => Object.fromEntries(Object.keys(CHESTS).map(type => [type, 0]));
 export function freshProfile() {
   // New players start with a rare chest so their first character with a power is one tap away.
-  return { version: 1, name: '', updatedAt: 0, points: 0, ranked: true, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], copies: {}, easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0 };
+  return { version: 1, name: '', updatedAt: 0, points: 0, ranked: true, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], copies: {}, easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0, daily: { day: '', progress: {}, claimed: [], bonus: false }, streak: { last: '', count: 0 } };
 }
 // Player nicknames: 3 to 14 letters, digits, spaces, "_" or "-". Returns '' when unusable.
 export function cleanName(text) {
@@ -201,6 +271,15 @@ export function parseProfile(raw) {
   // never counts a victory twice.
   if (data.ranked !== true) result.points = Math.max(result.points, startingPoints(result));
   result.ranked = true;
+  // Missions and streak are small daily state: a broken copy just starts over.
+  const day = text => typeof text === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(text);
+  const d = data.daily;
+  if (d && day(d.day) && typeof d.progress === 'object' && d.progress && Array.isArray(d.claimed)) {
+    result.daily = { day: d.day, progress: {}, claimed: d.claimed.filter(id => id in MISSIONS), bonus: d.bonus === true };
+    for (const [id, value] of Object.entries(d.progress)) if (id in MISSIONS && count(value)) result.daily.progress[id] = Math.min(1e4, Math.floor(value));
+  }
+  const st = data.streak;
+  if (st && day(st.last) && Number.isInteger(st.count) && st.count > 0 && st.count <= 1e5) result.streak = { last: st.last, count: st.count };
   return { ...result, name: cleanName(data.name), easy: data.easy === true, nemesis: typeof data.nemesis === 'string' ? data.nemesis.slice(0, 40) : '', skin: data.skin, trail: data.trail };
 }
 // Every chest prize: characters (except the starter) and the special trail colors.

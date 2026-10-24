@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale } from '../engine.js';
+import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays } from '../engine.js';
 import { Renderer } from '../renderer.js';
 
 function clean(arena = new Arena()) {
@@ -257,6 +257,40 @@ test('a higher character level reaches further: bigger bomb, longer shot', () =>
   const low = bombed(1), high = bombed(CHARACTER_MAX_LEVEL);
   assert.ok(high.cells > low.cells * 1.5, `level 10 bomb paints more: ${low.cells} → ${high.cells}`);
   assert.ok(high.shot > low.shot, 'level 10 shots fly further');
+});
+test('daily missions: three a day, same for everyone, progress from matches, stars and a bonus chest', () => {
+  const day = '2026-10-23', missions = missionsFor(day);
+  assert.equal(missions.length, 3); assert.equal(new Set(missions.map(m => m.id)).size, 3);
+  assert.deepEqual(missionsFor(day), missions, 'the same day always gives the same missions');
+  assert.notDeepEqual(['2026-10-24', '2026-10-25', '2026-10-26'].map(d => missionsFor(d).map(m => m.id).join()), Array(3).fill(missions.map(m => m.id).join()), 'other days change');
+  const profile = freshProfile();
+  const big = { kills: 10, percent: 60, orbs: 40, powers: 20, online: true, won: true };
+  recordMatch(profile, day, big); const done = recordMatch(profile, day, big).concat(recordMatch(profile, day, big));
+  assert.ok(dailyMissions(profile, day).every(m => m.done), 'three big matches complete every mission');
+  assert.ok(done.length >= 0);
+  const bits = profile.bits;
+  for (const m of missions) assert.equal(claimMission(profile, day, m.id), m.reward);
+  assert.equal(profile.bits - bits, missions.reduce((a, m) => a + m.reward, 0));
+  assert.equal(claimMission(profile, day, missions[0].id), 0, 'a mission pays once');
+  const chests = profile.chests[MISSION_BONUS];
+  assert.ok(claimMissionBonus(profile, day)); assert.equal(profile.chests[MISSION_BONUS], chests + 1);
+  assert.equal(claimMissionBonus(profile, day), false, 'the bonus is once a day');
+  // A new day starts over, and the state survives a reload.
+  assert.ok(dailyMissions(profile, '2026-10-24').every(m => !m.claimed && !m.done));
+  recordMatch(profile, '2026-10-24', { kills: 1 });
+  assert.deepEqual(parseProfile(JSON.stringify(profile)).daily, profile.daily);
+});
+test('daily streak: better rewards each day in a row, back to day 1 after a missed day', () => {
+  const profile = freshProfile();
+  assert.equal(addDays('2026-10-31', 1), '2026-11-01');
+  assert.deepEqual(claimStreak(profile, '2026-10-20'), STREAK_REWARDS[0]);
+  assert.equal(claimStreak(profile, '2026-10-20'), null, 'once a day');
+  assert.equal(streakStatus(profile, '2026-10-20').claimed, true);
+  claimStreak(profile, '2026-10-21'); claimStreak(profile, '2026-10-22');
+  assert.equal(profile.streak.count, 3); assert.equal(profile.chests.comun, 1, 'day 3 gives a common chest');
+  assert.equal(streakStatus(profile, '2026-10-24').count, 1, 'missing a day starts over');
+  assert.deepEqual(parseProfile(JSON.stringify(profile)).streak, profile.streak);
+  assert.equal(parseProfile(JSON.stringify({ ...profile, streak: { last: 'ayer', count: 3 } })).streak.count, 0, 'a broken streak is dropped');
 });
 test('solo: more than half is a victory, but the match only ends at 100% or when caught', () => {
   const arena = clean();

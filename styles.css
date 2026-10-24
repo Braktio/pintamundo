@@ -589,3 +589,28 @@ body.in-match { touch-action:none; overscroll-behavior:none }
 .char-level small { font-size:12px; font-weight:800; opacity:.85 }
 .crate-reward .char-level small { color:#fff; opacity:1 }
 .rank-avatar { flex:none; width:40px; height:40px; border:3px solid var(--ink); border-radius:50%; background:#e8f0ff }
+
+/* Daily streak and missions */
+.side-badge>span { position:relative }
+.badge-dot { position:absolute; top:-2px; right:-2px; width:18px; height:18px; border:3px solid var(--ink); border-radius:50%; background:var(--red); animation:pulse 1.2s ease-in-out infinite }
+.streak-week { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-top:10px }
+.streak-day { display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 2px; border:3px solid var(--ink); border-radius:14px; background:#ffffffe0; color:var(--ink); font:13px var(--display) }
+.streak-day small { font-size:11px; font-weight:800 }
+.streak-day svg { width:34px; height:auto }
+.streak-star { font-size:26px; line-height:1.2 }
+.streak-day.past { opacity:.55 }
+.streak-day.today { background:linear-gradient(#fff6a8,var(--yellow)); box-shadow:0 0 0 3px #fff; transform:scale(1.06) }
+.missions-title { margin-top:16px }
+.missions { margin:8px 0 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:8px; text-align:left }
+.mission-row { display:flex; align-items:center; gap:10px; padding:6px 8px; border:3px solid var(--ink); border-radius:16px; background:#fff; color:var(--ink) }
+.mission-row>div { flex:1; min-width:0 }
+.mission-row b { display:block; font:16px var(--display) }
+.mission-row .dialog-button { min-height:44px; padding:4px 12px; font-size:16px }
+.mission-row.claimed { opacity:.65 }
+.mission-icon { font-size:28px }
+.mission-bar { position:relative; height:18px; margin-top:4px; border:3px solid var(--ink); border-radius:99px; background:#1d2a8c; overflow:hidden }
+.mission-bar i { display:block; height:100%; background:linear-gradient(#8ff067,#43c41f) }
+.mission-bar span { position:absolute; inset:0; display:grid; place-items:center; font:11px var(--display); color:#fff; -webkit-text-stroke:3px var(--ink); paint-order:stroke fill }
+.mission-bonus { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:10px; font-weight:800 }
+.mission-bonus.claimed { opacity:.7 }
+.mission-bonus .dialog-button { min-height:44px; padding:4px 14px; font-size:16px }

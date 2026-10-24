@@ -1,4 +1,4 @@
-import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, rankChange, tierStart, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
+import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, rankChange, tierStart, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
 import { Renderer, shade } from './renderer.js';
 import { Connection, Mirror, defaultServer, rememberServer, normalizeServer } from './online.js';
 import * as cloud from './cloud.js';
@@ -187,9 +187,12 @@ const CHEST_THEMES = {
     plankLine: '#7c2500'
   }
 };
+// Gradient ids are unique per drawing: a chest inside a hidden screen would otherwise
+// leave every later copy of the same chest without its colors.
+let chestSeq = 0;
 export function chestSVG(type, size = 100) {
   const t = CHEST_THEMES[type] || CHEST_THEMES.comun;
-  const p = `cst_${type}`;
+  const p = `cst_${type}_${chestSeq++}`;
   const h = Math.round(size * 0.84);
 
   let emblem = '';
@@ -388,6 +391,7 @@ function renderMenu() {
   const current = characterFor(profile.skin);
   $('home-character').innerHTML = `${rarityChip(current.rarity)} <b>${current.name}</b> ${levelsUp(current) ? levelChip(current.id) : ''} <span class="home-powers">${powerIcons(current.powers)}</span>`;
   renderEasy(); renderChests(); renderHangar(); renderAccount(); renderRanks();
+  $('missions-dot').hidden = !dailyWaiting();
 }
 let screen = 'home';
 function showScreen(name) {
@@ -483,7 +487,7 @@ function start() {
 function enterMatch() {
   renderer.camera = { x: arena.actors[0].x, y: arena.actors[0].y };
   renderer.particles = []; renderer.floats = []; renderer.rings = []; renderer.brokenTrails = [];
-  matchChests = [];
+  matchChests = []; matchStats = { orbs: 0, powers: 0 };
   document.body.classList.add('in-match');
   if (matchMedia('(pointer: coarse)').matches) void enterFullscreen();
   $('menu').hidden = true; $('hud').hidden = false;
@@ -549,7 +553,9 @@ function end(won, reason, ranking = null) {
   const before = rankFor(profile.points), change = rankChange({ stars, kills: player.kills, perfect, place: mirror && ranking ? ranking.indexOf(0) + 1 : 0, players: mirror && ranking ? ranking.length : 0 });
   profile.points = Math.max(0, profile.points + change);
   const after = rankFor(profile.points);
+  const completed = recordMatch(profile, today(), { kills: player.kills, percent, orbs: matchStats.orbs, powers: matchStats.powers, online: !!mirror, won });
   save(true); publishRank();
+  for (const mission of completed) toast(`✅ Misión cumplida: ${mission.text}. ¡Reclámala en Misiones!`);
   const currentGeneration = generation;
   setTimeout(() => {
     if (currentGeneration !== generation) return;
@@ -691,8 +697,8 @@ function processEvents() {
       if (event.id === 0) tone('death'); else if (event.killer === 0) tone('kill');
     }
     if (event.type === 'capture' && event.id === 0 && event.cells) tone();
-    if (event.type === 'ability' && event.id === 0) tone('ability');
-    if (event.type === 'orb' && event.id === 0) tone('orb');
+    if (event.type === 'ability' && event.id === 0) { tone('ability'); matchStats.powers++; }
+    if (event.type === 'orb' && event.id === 0) { tone('orb'); matchStats.orbs++; }
     if (event.type === 'out' && event.id === 0) { announce('¡Te atraparon! 👀'); toast('Ahora miras la partida. Cambia de jugador con ◀ ▶.'); spectate(arena.lastKiller ?? -1); }
     if (event.type === 'victory' && event.id === 0) { announce('🏆 ¡GANASTE! ¡Sigue hasta el 100%!'); tone('level'); }
     // New robots reuse the slots of caught ones: refresh their ranking avatar.
@@ -834,6 +840,44 @@ function renderRanks() {
   if ($('rank-retry')) $('rank-retry').onclick = () => loadLeaderboard(true);
 }
 document.querySelectorAll('[data-ranks]').forEach(button => button.onclick = () => { rankTab = button.dataset.ranks; renderRanks(); });
+
+// ---------- Daily missions and streak ----------
+// Days follow the phone's own calendar, so a new day starts at local midnight.
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const rewardText = reward => reward.bits ? `${number(reward.bits)} ⭐` : CHESTS[reward.chest].name;
+const rewardArt = reward => reward.bits ? '<span class="streak-star">⭐</span>' : chestSVG(reward.chest, 44);
+// Something waiting to be claimed: today's streak, a finished mission or the bonus chest.
+function dailyWaiting() {
+  const day = today(), missions = dailyMissions(profile, day);
+  return !streakStatus(profile, day).claimed || missions.some(m => m.done && !m.claimed) || (missions.every(m => m.claimed) && !profile.daily.bonus);
+}
+function openMissions() {
+  const day = today(), missions = dailyMissions(profile, day), streak = streakStatus(profile, day);
+  const week = STREAK_REWARDS.map((reward, i) => {
+    const position = (streak.count - 1) % STREAK_REWARDS.length, past = i < position || (i === position && streak.claimed);
+    return `<div class="streak-day ${past ? 'past' : i === position ? 'today' : ''}"><small>Día ${i + 1}</small>${rewardArt(reward)}<b>${reward.bits ? number(reward.bits) : '🎁'}</b></div>`;
+  }).join('');
+  const rows = missions.map(m => `<li class="mission-row ${m.claimed ? 'claimed' : ''}"><span class="mission-icon">${m.icon}</span><div><b>${m.text}</b><div class="mission-bar"><i style="width:${m.have / m.goal * 100}%"></i><span>${m.have} / ${m.goal}</span></div></div><button class="dialog-button ${m.done && !m.claimed ? '' : 'secondary'}" data-claim="${m.id}" ${m.done && !m.claimed ? '' : 'disabled'}>${m.claimed ? '✓' : `+${m.reward} ⭐`}</button></li>`).join('');
+  const bonusReady = missions.every(m => m.claimed) && !profile.daily.bonus;
+  dialog(`<p class="eyebrow">📋 Cada día</p><h2>Racha de ${streak.count} ${streak.count === 1 ? 'día' : 'días'} 🔥</h2><div class="streak-week">${week}</div><div class="dialog-buttons"><button id="streak-claim" class="dialog-button" ${streak.claimed ? 'disabled' : ''}>${streak.claimed ? '✓ Vuelve mañana' : `¡Reclamar ${rewardText(streak.reward)}!`}</button></div><h2 class="missions-title">Misiones de hoy</h2><ul class="missions">${rows}</ul><div class="mission-bonus ${profile.daily.bonus ? 'claimed' : ''}">${chestSVG(MISSION_BONUS, 48)}<span>${profile.daily.bonus ? '¡Cofre de hoy reclamado!' : 'Completa las 3 misiones y gana un ' + CHESTS[MISSION_BONUS].name}</span>${bonusReady ? '<button id="bonus-claim" class="dialog-button">¡Reclamar!</button>' : ''}</div><p class="screen-note">Las misiones cambian cada día a medianoche. Si faltas un día, la racha vuelve a empezar.</p><div class="dialog-buttons"><button id="missions-close" class="dialog-button secondary">Cerrar</button></div>`);
+  $('streak-claim').onclick = () => {
+    const reward = claimStreak(profile, day); if (!reward) return;
+    tone('level'); toast(`🔥 ¡Racha de ${profile.streak.count} ${profile.streak.count === 1 ? 'día' : 'días'}! Ganaste ${rewardText(reward)}.`);
+    save(true); renderMenu(); openMissions();
+  };
+  $('dialog-content').querySelectorAll('[data-claim]').forEach(button => button.onclick = () => {
+    const reward = claimMission(profile, day, button.dataset.claim); if (!reward) return;
+    tone('capture'); save(true); renderMenu(); openMissions();
+  });
+  if ($('bonus-claim')) $('bonus-claim').onclick = () => {
+    if (!claimMissionBonus(profile, day)) return;
+    tone('level'); toast(`🎁 ¡Ganaste un ${CHESTS[MISSION_BONUS].name}! Ábrelo en Cofres.`); save(true); renderMenu(); openMissions();
+  };
+  $('missions-close').onclick = () => $('dialog').close();
+}
+$('missions-badge').onclick = openMissions;
+// Counted during a match for the missions: stars picked up and powers used by the player.
+let matchStats = { orbs: 0, powers: 0 };
 
 // ---------- Profile and cloud save ----------
 // The nickname is what other players see online. Cleaned names only contain letters,

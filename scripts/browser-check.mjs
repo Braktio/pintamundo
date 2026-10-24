@@ -53,11 +53,20 @@ try {
   await evaluate('document.getElementById("help-side").click()');
   await page('Input.dispatchKeyEvent', { type: 'keyDown', code: 'Escape', key: 'Escape' });
   await page('Input.dispatchKeyEvent', { type: 'keyUp', code: 'Escape', key: 'Escape' });
+  const screenshot = async name => { const shot = await page('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }); await writeFile(new URL(name, root), Buffer.from(shot.data, 'base64')); };
   assert.equal(await evaluate('document.getElementById("dialog").open'), false, 'Escape closes help');
+  // Daily missions and streak: the badge shows a dot, today's streak reward can be claimed once.
+  assert.equal(await evaluate('document.getElementById("missions-dot").hidden'), false, 'something is waiting to be claimed');
+  await evaluate('document.getElementById("missions-badge").click()');
+  assert.equal(await evaluate('document.querySelectorAll(".mission-row").length'), 3, 'three missions today');
+  await evaluate('document.getElementById("streak-claim").click()'); await sleep(200);
+  assert.equal(await evaluate('JSON.parse(localStorage.getItem("neon-frontier.profile.v1")).streak.count'), 1, 'day 1 of the streak');
+  assert.equal(await evaluate('document.getElementById("streak-claim").disabled'), true, 'once a day');
+  await screenshot('preview-missions.png');
+  await evaluate('document.getElementById("missions-close").click()');
   // Waits up to `ms` for a page expression to become true (the cloud check loads from the network).
   const until = async (expression, ms = 6000) => { for (let t = 0; t < ms && !await evaluate(expression); t += 100) await sleep(100); return evaluate(expression); };
   assert.equal(await until('[...document.querySelectorAll("img.ui-icon")].every(i => i.complete && i.naturalWidth > 0)'), true, 'every interface icon loads');
-  const screenshot = async name => { const shot = await page('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }); await writeFile(new URL(name, root), Buffer.from(shot.data, 'base64')); };
   await screenshot('preview-menu.png');
   assert.equal(await evaluate('Boolean(document.querySelector("#rank-tab-icon svg"))'), true, 'the Rangos tab shows the rank emblem');
   for (const tab of ['collection', 'crates', 'progress', 'ranks']) {
