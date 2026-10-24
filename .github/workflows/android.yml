@@ -32,24 +32,29 @@ jobs:
         run: npm run android:sync
       - name: Recuperar la clave de firma
         run: echo "${{ secrets.PINTAMUNDO_KEYSTORE_B64 }}" | base64 -d > "$RUNNER_TEMP/pintamundo.keystore"
-      - name: Construir APK firmada
+      - name: Construir APK y AAB firmados
         working-directory: android
         env:
           PINTAMUNDO_KEYSTORE: ${{ runner.temp }}/pintamundo.keystore
           PINTAMUNDO_KEYSTORE_PASSWORD: ${{ secrets.PINTAMUNDO_KEYSTORE_PASSWORD }}
           PINTAMUNDO_KEY_ALIAS: pintamundo
           VERSION_CODE: ${{ github.run_number }}
-        run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon
-      - name: Copiar APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk pintamundo.apk
+        # The APK installs directly on a phone; the AAB (Android App Bundle) is what Google Play asks for.
+        run: chmod +x gradlew && ./gradlew assembleRelease bundleRelease --no-daemon
+      - name: Copiar APK y AAB
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk pintamundo.apk
+          cp android/app/build/outputs/bundle/release/app-release.aab pintamundo.aab
       - uses: actions/upload-artifact@v4
         with:
-          name: pintamundo-apk
-          path: pintamundo.apk
+          name: pintamundo-android
+          path: |
+            pintamundo.apk
+            pintamundo.aab
       - name: Publicar en la versión fija «apk»
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view apk >/dev/null 2>&1 || gh release create apk --prerelease --title "Pintamundo para Android" --notes "Última APK construida automáticamente desde main. Descárgala desde el móvil e instálala."
-          gh release upload apk pintamundo.apk --clobber
-          gh release edit apk --notes "Última APK construida automáticamente desde main (versión 1.0.${{ github.run_number }}). Descárgala desde el móvil e instálala."
+          gh release view apk >/dev/null 2>&1 || gh release create apk --prerelease --title "Pintamundo para Android" --notes "Última APK construida automáticamente desde main. Descárgala desde el móvil e instálala. El archivo pintamundo.aab es el que se sube a Google Play."
+          gh release upload apk pintamundo.apk pintamundo.aab --clobber
+          gh release edit apk --notes "Última APK construida automáticamente desde main (versión 1.0.${{ github.run_number }}). Descarga pintamundo.apk desde el móvil para instalarla; pintamundo.aab es el archivo para Google Play."

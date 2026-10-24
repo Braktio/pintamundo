@@ -255,6 +255,10 @@ El proyecto Android (Capacitor 8) está en `android/`. En cada cambio en `main`,
 
 **Clave de firma:** está en `firma-android/` (fuera de git) y en los secretos del repositorio (`PINTAMUNDO_KEYSTORE_B64`, `PINTAMUNDO_KEYSTORE_PASSWORD`). Sin ella no se pueden publicar actualizaciones, tampoco en Google Play; guarda una copia de seguridad.
 
+## Google Play
+
+GitHub Actions genera, además de la APK, **`pintamundo.aab`** (Android App Bundle), el archivo que se sube a Google Play, y lo publica en la misma versión «apk». La carpeta `play-store/` tiene el icono, el gráfico de funciones, las capturas (`scripts/store-shots.mjs`), los textos de la ficha, las respuestas de los formularios y los pasos para añadir a Firebase la huella de la Firma de apps de Play.
+
 ## Servidor en internet
 
 El servidor público está en **https://pintamundo.onrender.com**, creado desde `render.yaml` como Blueprint de Render (plan gratuito, región Virginia): `npm ci --omit=dev`, `node server.mjs` y comprobación en `/health`. En el plan gratuito se duerme tras 15 minutos sin jugadores; el juego reintenta la conexión hasta un minuto mientras se despierta.
