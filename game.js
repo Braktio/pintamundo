@@ -578,7 +578,7 @@ function end(won, reason, ranking = null) {
     const bonus = Math.floor(arena.bits), adOffer = bonus > 0 && adReady() ? `<div class="dialog-buttons"><button class="dialog-button ad-button" id="ad-double">📺 Duplica tus estrellas: +${number(bonus)} ⭐</button></div>` : '';
     const actions = `${adOffer}<div class="dialog-buttons"><button class="dialog-button" id="retry">${!online ? '¡OTRA VEZ! ▶' : online.private ? '👫 Volver a la sala' : '¡OTRA PARTIDA! ▶'}</button><button class="dialog-button secondary" id="to-menu">🏠 Menú</button></div>`;
     const wire = () => {
-      $('retry').onclick = !online ? start : online.private ? () => online.lobby ? showLobby(online.lobby) : toast('La sala se está preparando…') : () => joinOnline('quick');
+      $('retry').onclick = !online ? start : online.private ? () => online.lobby ? showLobby(online.lobby) : toast('La sala se está preparando…') : playAgainOnline;
       $('to-menu').onclick = menu;
       if ($('ad-double')) $('ad-double').onclick = async () => {
         const button = $('ad-double'); button.disabled = true;
@@ -1222,7 +1222,8 @@ function onServerMessage(message) {
   if (message.t === 'state') { if (mirror) mirror.state(message); return; }
   if (message.t === 'lobby') {
     online.lobby = message; online.private = message.private;
-    if (state === 'menu' || state === 'lobby') showLobby(message);
+    // From the results, only when the player asked for another quick match.
+    if (state === 'menu' || state === 'lobby' || (state === 'results' && online.requeue)) { online.requeue = false; showLobby(message); }
     return;
   }
   if (message.t === 'start') { startOnline(message); return; }
@@ -1261,6 +1262,13 @@ function sendHeading(time) {
   if (!(turn > .03) && time - lastHeading.at < 200) return;
   online.connection.send({ t: 'input', a: Math.round(player.desired * 1000) / 1000 });
   lastHeading = { angle: player.desired, at: time };
+}
+// "Another match" after a quick online match: queue again and open the lobby as soon as
+// the server answers (the results dialog would otherwise ignore it).
+function playAgainOnline() {
+  if ($('retry')) { $('retry').disabled = true; $('retry').textContent = '⏳ Buscando partida…'; }
+  if (online) online.requeue = true;
+  void joinOnline('quick').then(() => { if (online) online.requeue = true; });
 }
 $('online').onclick = openOnline;
 

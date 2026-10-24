@@ -30,7 +30,9 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try { ranked = await createRanked(process.env.FIREBASE_SERVICE_ACCOUNT); console.log('Ranking en línea activado.'); }
   catch (error) { console.error('Ranking en línea desactivado:', error.message); }
 }
-const hub = new Hub(ranked ? { verify: ranked.verify, onResult: results => ranked.record(results, (client, message) => hub.send(client, message)) } : {});
+// MATCH_SECONDS shortens online matches for local checks (default: 3 minutes).
+const matchSeconds = Number(process.env.MATCH_SECONDS) || undefined;
+const hub = new Hub({ ...(matchSeconds ? { matchSeconds } : {}), ...(ranked ? { verify: ranked.verify, onResult: results => ranked.record(results, (client, message) => hub.send(client, message)) } : {}) });
 const sockets = new WebSocketServer({ server, path: '/ws', maxPayload: 2048 });
 sockets.on('connection', socket => {
   socket.alive = true;

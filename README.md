@@ -251,7 +251,7 @@ No hay chat. Cada jugador aparece con su nombre de perfil, ya limpio de símbolo
 
 La APK y la versión de GitHub Pages se conectan solas al servidor público `wss://pintamundo.onrender.com/ws` (`PUBLIC_SERVER` en `online.js`). En **⚙️ Servidor** se puede escribir otro, por ejemplo `192.168.1.20:5173` para jugar con el PC en la misma Wi-Fi; se recuerda en cada dispositivo.
 
-Archivos: `multiplayer.mjs` (salas, códigos, relleno con robots y envío de cambios), `online.js` (conexión, réplica de la partida y suavizado en el teléfono) y `server.mjs` (sirve el juego, `/ws` para las partidas y `/health` para los servicios de alojamiento). La comprobación `node scripts/online-check.mjs "ruta/a/chrome.exe"` abre dos pestañas que juegan la misma partida.
+Archivos: `multiplayer.mjs` (salas, códigos, relleno con robots y envío de cambios), `online.js` (conexión, réplica de la partida y suavizado en el teléfono) y `server.mjs` (sirve el juego, `/ws` para las partidas y `/health` para los servicios de alojamiento). La comprobación `node scripts/online-check.mjs "ruta/a/chrome.exe"` abre dos pestañas que juegan la misma partida. `node scripts/replay-check.mjs "ruta/a/chrome.exe"` juega una partida rápida de 6 s (`MATCH_SECONDS` acorta las partidas del servidor) y comprueba que «¡OTRA PARTIDA!» lleva a una sala nueva.
 
 ## App de Android (APK)
 
