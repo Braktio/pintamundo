@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays, START_CHARGE, PROGRESS_EPOCH, fillChestBar, levelChest, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonStart, seasonReward, FIRST_SEASON, FREE_CHEST_HOURS } from '../engine.js';
+import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays, START_CHARGE, PROGRESS_EPOCH, fillChestBar, levelChest, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonStart, seasonReward, FIRST_SEASON, FREE_CHEST_HOURS } from '../engine.js';
 import { Renderer } from '../renderer.js';
 
 function clean(arena = new Arena()) {
@@ -252,8 +252,8 @@ test('chests are harder to get: a chest bar fills with match stars, sparse level
   assert.deepEqual([1, 2, 3, 4, 5, 10].map(levelChest), [null, 'comun', null, 'comun', 'raro', 'epico']);
   assert.ok(CHESTS.comun.price >= 1000 && CHESTS.legendario.price >= 20000);
 });
-test('rare and better characters level up with repeats, without a top level', () => {
-  assert.equal(copiesFor(1), 0); assert.equal(copiesFor(2), 1); assert.equal(copiesFor(3), 2); assert.equal(copiesFor(10), 25);
+test('rare and better characters level up with repeats, up to level 10', () => {
+  assert.equal(copiesFor(1), 0); assert.equal(copiesFor(2), 1); assert.equal(copiesFor(3), 2); assert.equal(copiesFor(CHARACTER_MAX_LEVEL), 25);
   const profile = freshProfile();
   profile.skins = ['abeja']; // a rare character (Imán)
   assert.equal(characterLevel(profile, 'abeja'), 1);
@@ -262,16 +262,13 @@ test('rare and better characters level up with repeats, without a top level', ()
   const repeat = openChest(profile, 'raro', () => rolls[r++ % rolls.length]);
   assert.ok(repeat.duplicate && repeat.prize.id === 'abeja' && repeat.levelUp && repeat.level === 2, JSON.stringify(repeat));
   assert.equal(profile.copies.abeja, 1); assert.equal(characterLevel(profile, 'abeja'), 2);
-  for (const level of [10, 11, 25, 60]) { profile.copies.abeja = copiesFor(level); assert.equal(characterLevel(profile, 'abeja'), level); profile.copies.abeja = copiesFor(level) - 1; assert.equal(characterLevel(profile, 'abeja'), level - 1); }
-  // Repeats keep levelling up past 10; commons never level up.
+  profile.copies.abeja = copiesFor(CHARACTER_MAX_LEVEL);
+  assert.equal(characterLevel(profile, 'abeja'), CHARACTER_MAX_LEVEL);
+  // At the top level a repeat turns into stars again; commons never level up.
   assert.equal(characterLevel(profile, 'interceptor'), 1); assert.equal(levelsUp(CHARACTERS.find(c => c.id === 'interceptor')), false);
-  // +4% reach per level up to 10, then +1% per level, never above +60%.
-  assert.equal(powerScale(1), 1); assert.ok(Math.abs(powerScale(10) - 1.36) < 1e-9); assert.ok(Math.abs(powerScale(20) - 1.46) < 1e-9);
-  assert.ok(Math.abs(powerScale(34) - 1.6) < 1e-9); assert.equal(powerScale(500), 1.6);
-  profile.copies.abeja = copiesFor(61) - 1;
-  const again = openChest(profile, 'raro', () => rolls[r++ % rolls.length]);
-  assert.ok(again.duplicate && again.level === 61, 'a repeat still levels up past 10');
-  assert.deepEqual(parseProfile(JSON.stringify(profile)).copies, { abeja: copiesFor(61) });
+  // Each level stretches the reach of the powers by 6%.
+  assert.equal(powerScale(1), 1); assert.ok(Math.abs(powerScale(10) - 1.36) < 1e-9);
+  assert.deepEqual(parseProfile(JSON.stringify(profile)).copies, { abeja: 25 });
   assert.throws(() => parseProfile(JSON.stringify({ ...profile, copies: { interceptor: 2 } })), 'commons cannot have levels');
 });
 test('a higher character level reaches further: bigger bomb, longer shot', () => {
@@ -281,7 +278,7 @@ test('a higher character level reaches further: bigger bomb, longer shot', () =>
     actor.x = 40.5; actor.y = 40.5; arena.ability(0, 'bomb');
     return { cells: actor.count, shot: (arena.ability(0, 'shoot'), arena.projectiles[0].life) };
   };
-  const low = bombed(1), high = bombed(10);
+  const low = bombed(1), high = bombed(CHARACTER_MAX_LEVEL);
   assert.ok(high.cells > low.cells * 1.5, `level 10 bomb paints more: ${low.cells} → ${high.cells}`);
   assert.ok(high.shot > low.shot, 'level 10 shots fly further');
 });
