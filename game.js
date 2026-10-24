@@ -1,4 +1,4 @@
-import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, rankChange, tierStart, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
+import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, rankChange, tierStart, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
 import { Renderer, shade } from './renderer.js';
 import { Connection, Mirror, defaultServer, rememberServer, normalizeServer } from './online.js';
 import * as cloud from './cloud.js';
@@ -311,6 +311,17 @@ const COLLECTION = {
   trails: { icon: '🎨', title: 'Colores', note: 'Tu color pinta tu camino y tu zona. ¡Busca más en los cofres!' },
   powers: { icon: '⚡', title: 'Poderes', note: 'Cada personaje trae sus propios poderes. Elige uno con poderes en la pestaña Personajes.' }
 };
+// Level of a rare-or-better character: its level, the repeats towards the next one and the
+// extra reach of its powers.
+function levelInfo(id) {
+  const level = characterLevel(profile, id), copies = profile.copies[id] || 0;
+  return { level, max: level >= CHARACTER_MAX_LEVEL, have: copies - copiesFor(level), need: copiesFor(level + 1) - copiesFor(level), bonus: Math.round((powerScale(level) - 1) * 100) };
+}
+const levelChip = id => `<span class="level-chip">Nv ${characterLevel(profile, id)}</span>`;
+function levelBlock(id) {
+  const info = levelInfo(id);
+  return `<div class="char-level">${levelChip(id)}<div class="copies"><i style="width:${info.max ? 100 : info.have / info.need * 100}%"></i><b>${info.max ? '¡NIVEL MÁXIMO!' : `🧩 ${info.have}/${info.need}`}</b></div>${info.bonus ? `<small>Poderes +${info.bonus}% de alcance</small>` : '<small>Los repetidos lo suben de nivel</small>'}</div>`;
+}
 function renderHangar() {
   const content = [];
   let owned = 0, total = 0;
@@ -321,7 +332,7 @@ function renderHangar() {
     for (const c of group) {
       const unlocked = ownsCharacter(profile, c.id);
       const lock = c.level > 1 ? '🔒 Nivel ' + c.level + ' o cofre' : '🎁 En cofres';
-      content.push(`<article class="hangar-card card rarity-${rarity} ${unlocked ? '' : 'locked'}"><span class="card-badge">${RARITIES[rarity].name}</span><div class="card-art">${skinArt(c.id)}</div><h3>${c.name}</h3><div class="power-list">${powerIcons(c.powers)}</div><div class="card-actions"><button data-skin="${c.id}" ${unlocked ? '' : 'disabled'} class="${profile.skin === c.id ? 'equipped' : ''}">${profile.skin === c.id ? '✓ Elegido' : unlocked ? 'Elegir' : lock}</button></div></article>`);
+      content.push(`<article class="hangar-card card rarity-${rarity} ${unlocked ? '' : 'locked'}"><span class="card-badge">${RARITIES[rarity].name}</span><div class="card-art">${skinArt(c.id)}</div><h3>${c.name}</h3><div class="power-list">${powerIcons(c.powers)}</div>${unlocked && levelsUp(c) ? levelBlock(c.id) : ''}<div class="card-actions"><button data-skin="${c.id}" ${unlocked ? '' : 'disabled'} class="${profile.skin === c.id ? 'equipped' : ''}">${profile.skin === c.id ? '✓ Elegido' : unlocked ? 'Elegir' : lock}</button></div></article>`);
     }
   }
   if (hangarTab === 'trails') for (const trail of TRAILS) {
@@ -357,6 +368,8 @@ function renderMenu() {
   const level = levelFor(profile.xp), start = levelXP(level), end = levelXP(level + 1);
   const xpText = `${number(profile.xp - start)} / ${number(end - start)} XP`, xpWidth = Math.min(100, (profile.xp - start) / (end - start) * 100) + '%';
   $('menu-level').textContent = level;
+  // The profile picture is the character currently chosen.
+  $('menu-avatar').src = renderer.portraitURL({ skin: profile.skin, color: playerColor() });
   $('menu-bits').textContent = number(profile.bits);
   $('menu-crates').textContent = totalChests();
   $('home-level').textContent = level; $('home-xp-label').textContent = xpText; $('home-xp').style.width = xpWidth;
@@ -373,7 +386,7 @@ function renderMenu() {
   $('stat-wins').textContent = number(profile.wins); $('stat-kills').textContent = number(profile.totalKills);
   $('stat-best').textContent = Math.round(profile.best) + '%';
   const current = characterFor(profile.skin);
-  $('home-character').innerHTML = `${rarityChip(current.rarity)} <b>${current.name}</b> <span class="home-powers">${powerIcons(current.powers)}</span>`;
+  $('home-character').innerHTML = `${rarityChip(current.rarity)} <b>${current.name}</b> ${levelsUp(current) ? levelChip(current.id) : ''} <span class="home-powers">${powerIcons(current.powers)}</span>`;
   renderEasy(); renderChests(); renderHangar(); renderAccount(); renderRanks();
 }
 let screen = 'home';
@@ -406,7 +419,7 @@ document.querySelectorAll('[data-hangar]').forEach(button => button.onclick = ()
 // `sequence` ({ left, next, actions, wire, gen }) is used after a match: each reveal moves on to
 // the next chest by itself, and the last one shows the match buttons instead of "close".
 function revealChest(type, sequence = null) {
-  const result = openChest(profile, type), { prize, rarity, duplicate, refund } = result;
+  const result = openChest(profile, type), { prize, rarity, duplicate, refund, level, levelUp } = result;
   save(true); renderMenu();
   dialog(`<div class="crate-reward"><p class="eyebrow">${CHESTS[type].name}</p><div class="crate-opening" id="crate-spinner">${chestSVG(type, 150)}</div><p>¿Qué habrá dentro…?</p></div>`);
   setTimeout(() => {
@@ -414,8 +427,10 @@ function revealChest(type, sequence = null) {
     tone(rarity === 'legendario' || rarity === 'mitico' ? 'level' : 'capture');
     const sparkles = Array.from({ length: 14 }, (_, i) => { const a = i / 14 * Math.PI * 2; return `<i style="--dx:${Math.round(Math.cos(a) * 160)}px;--dy:${Math.round(Math.sin(a) * 120)}px">${i % 2 ? '⭐' : '✨'}</i>`; }).join('');
     const isCharacter = prize.type === 'skins', more = profile.chests[type];
-    const detail = duplicate ? `¡Ya lo tenías! Te damos ${refund} ⭐ a cambio.` : isCharacter ? (prize.powers.length ? '¡Nuevo personaje con poderes!' : '¡Nuevo amigo! Los comunes no tienen poderes, pero son muy simpáticos.') : '¡Ya puedes pintar con este color!';
-    $('dialog-content').innerHTML = `<div class="crate-reward reveal-${rarity}"><div class="sparkles" aria-hidden="true">${sparkles}</div><p class="rarity-banner rarity-${rarity}">¡${RARITIES[rarity].name.toUpperCase()}!</p><div class="crate-opening revealed">${isCharacter ? skinArt(prize.id, 160) : swatchArt(prize.color)}</div><h2>${prize.name}</h2>${isCharacter ? `<div class="power-list">${powerIcons(prize.powers)}</div>` : ''}<p>${detail}</p><div class="dialog-buttons">${isCharacter && !duplicate ? '<button id="equip-prize" class="dialog-button">✓ ¡Usar ahora!</button>' : ''}${sequence ? (sequence.next ? `<button id="next-chest" class="dialog-button">🎁 Siguiente (${sequence.left})</button>` : '') : `${more ? `<button id="open-again" class="dialog-button">🎁 Abrir otro (${more})</button>` : ''}<button id="close-crate" class="dialog-button secondary">¡GENIAL! 🎉</button>`}</div>${sequence && !sequence.next ? sequence.actions : ''}</div>`;
+    const growth = level && levelInfo(prize.id);
+    const detail = duplicate && level ? (levelUp ? `¡Repetido! ${prize.name} sube al nivel ${level} ⬆️ Sus poderes llegan un ${growth.bonus}% más lejos.` : `¡Repetido! +1 🧩 para ${prize.name}: ${growth.have}/${growth.need} para el nivel ${level + 1}.`)
+      : duplicate ? `¡Ya lo tenías! Te damos ${refund} ⭐ a cambio.` : isCharacter ? (prize.powers.length ? '¡Nuevo personaje con poderes!' : '¡Nuevo amigo! Los comunes no tienen poderes, pero son muy simpáticos.') : '¡Ya puedes pintar con este color!';
+    $('dialog-content').innerHTML = `<div class="crate-reward reveal-${rarity}"><div class="sparkles" aria-hidden="true">${sparkles}</div><p class="rarity-banner rarity-${rarity}">¡${RARITIES[rarity].name.toUpperCase()}!</p><div class="crate-opening revealed">${isCharacter ? skinArt(prize.id, 160) : swatchArt(prize.color)}</div><h2>${prize.name}</h2>${isCharacter ? `<div class="power-list">${powerIcons(prize.powers)}</div>` : ''}${level ? levelBlock(prize.id) : ''}<p>${detail}</p><div class="dialog-buttons">${isCharacter && !duplicate ? '<button id="equip-prize" class="dialog-button">✓ ¡Usar ahora!</button>' : ''}${sequence ? (sequence.next ? `<button id="next-chest" class="dialog-button">🎁 Siguiente (${sequence.left})</button>` : '') : `${more ? `<button id="open-again" class="dialog-button">🎁 Abrir otro (${more})</button>` : ''}<button id="close-crate" class="dialog-button secondary">¡GENIAL! 🎉</button>`}</div>${sequence && !sequence.next ? sequence.actions : ''}</div>`;
     if (sequence) {
       // The next chest opens by itself after a moment; choosing a character waits for a tap.
       let advance = 0;
@@ -798,7 +813,8 @@ function renderRanks() {
     : `<ol class="world-ranking">${leaderboard.rows.map((row, i) => {
         // Names come from other players' devices: only cleaned text reaches the page.
         const points = Math.max(0, Math.floor(Number(row.points) || 0)), me = account && row.uid === account.uid;
-        return `<li class="${me ? 'me' : ''}"><span class="place">${i + 1}</span>${rankBadge(rankFor(points).tier, 38)}<b>${cleanName(row.name) || 'Jugador'}${me ? ' (tú)' : ''}</b><span class="points">${number(points)} 🏆</span></li>`;
+        const skin = CHARACTERS.some(c => c.id === row.skin) ? row.skin : 'interceptor';
+        return `<li class="${me ? 'me' : ''}"><span class="place">${i + 1}</span><img class="rank-avatar" src="${renderer.portraitURL({ skin, color: '#2fa8ff' }, 40)}" alt="">${rankBadge(rankFor(points).tier, 38)}<b>${cleanName(row.name) || 'Jugador'}${me ? ' (tú)' : ''}</b><span class="points">${number(points)} 🏆</span></li>`;
       }).join('')}</ol>`;
   $('rank-list').innerHTML = join + body;
   if ($('rank-login')) $('rank-login').onclick = openAccount;
@@ -910,7 +926,10 @@ async function restoreAccount() {
   if (!cloud.available) return;
   try { account = await cloud.currentAccount(); } catch { account = null; }
   renderAccount();
-  if (account) await syncWithCloud(false);
+  if (!account) return;
+  await syncWithCloud(false);
+  // Every signed-in player who opens the game appears in the world ranking, even before playing.
+  publishRank();
 }
 
 // ---------- Online play ----------
@@ -948,7 +967,8 @@ async function joinOnline(kind, code = '') {
   }
   online.private = kind !== 'quick'; online.lobby = null;
   const character = characterFor(profile.skin);
-  online.connection.send({ t: kind, code, name: profile.name, skin: ownsCharacter(profile, character.id) ? character.id : 'interceptor', color: playerColor(), easy: profile.easy === true });
+  const skin = ownsCharacter(profile, character.id) ? character.id : 'interceptor';
+  online.connection.send({ t: kind, code, name: profile.name, level: characterLevel(profile, skin), skin, color: playerColor(), easy: profile.easy === true });
 }
 function disconnect() {
   if (!online) return;

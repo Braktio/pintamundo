@@ -104,6 +104,9 @@ export const RANKS = [
   { id: 'leyenda', name: 'Leyenda', colors: ['#fff3a0', '#ff4f8b'] }
 ];
 export const TIERS = RANKS.length * 3;
+// Trophies for a profile that played before the ranks existed: victories, catches and its
+// best zone, capped at 1.000 (Esmeralda 1 is 1.056).
+export const startingPoints = p => Math.min(1000, Math.floor(p.wins * 12 + p.totalKills * 2 + p.best));
 export const tierStart = tier => 40 * tier + 4 * tier * tier;
 // { tier, rank, division, name, start, next } for a trophy count; `next` is null at the top.
 export function rankFor(points) {
@@ -142,7 +145,7 @@ export function crossedCells(x0, y0, x1, y1) {
 export const emptyChests = () => Object.fromEntries(Object.keys(CHESTS).map(type => [type, 0]));
 export function freshProfile() {
   // New players start with a rare chest so their first character with a power is one tap away.
-  return { version: 1, name: '', updatedAt: 0, points: 0, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0 };
+  return { version: 1, name: '', updatedAt: 0, points: 0, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], copies: {}, easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0 };
 }
 // Player nicknames: 3 to 14 letters, digits, spaces, "_" or "-". Returns '' when unusable.
 export function cleanName(text) {
@@ -183,8 +186,18 @@ export function parseProfile(raw) {
   const latest = Date.now() + FREE_CHEST_HOURS * 3600000;
   result.freeChestAt = Number.isFinite(data.freeChestAt) && data.freeChestAt > 0 ? Math.min(data.freeChestAt, latest) : 0;
   result.updatedAt = Number.isFinite(data.updatedAt) && data.updatedAt > 0 ? data.updatedAt : 0;
-  // Older saves have no trophies yet.
+  // Repeats collected per character (its level); older saves have none.
+  result.copies = {};
+  if (data.copies !== undefined) {
+    if (typeof data.copies !== 'object' || data.copies === null || Array.isArray(data.copies)) throw new Error('Niveles inválidos');
+    for (const [id, value] of Object.entries(data.copies)) {
+      if (!levelsUp(CHARACTERS.find(c => c.id === id)) || !count(value) || value > 1000) throw new Error('Niveles inválidos');
+      if (value) result.copies[id] = Math.floor(value);
+    }
+  }
+  // Saves from before the ranks start with trophies earned from their past results.
   if (data.points !== undefined) { if (!count(data.points) || data.points > 1e6) throw new Error('Copas inválidas'); result.points = Math.floor(data.points); }
+  else result.points = startingPoints(result);
   return { ...result, name: cleanName(data.name), easy: data.easy === true, nemesis: typeof data.nemesis === 'string' ? data.nemesis.slice(0, 40) : '', skin: data.skin, trail: data.trail };
 }
 // Every chest prize: characters (except the starter) and the special trail colors.
@@ -198,15 +211,42 @@ export function rollRarity(type, random = Math.random) {
   for (const [rarity, weight] of odds) { roll -= weight; if (roll < 0) return rarity; }
   return odds.at(-1)[0];
 }
-// Opens one chest into the profile. Unowned prizes of the rolled rarity are preferred,
-// so players rarely get repeats; a repeat is converted into stars.
+// Character levels: rare, epic, legendary and mythic characters level up (1 → 10) with
+// repeats from chests. Going from level n to n+1 takes ceil(n / 2) repeats (25 in all),
+// and every level stretches the reach of the character's powers by 6%.
+export const CHARACTER_MAX_LEVEL = 10, POWER_STEP = .06;
+// While there are still new prizes of the rolled rarity, this share of chests gives a
+// repeat of an owned character that can still level up.
+export const REPEAT_CHANCE = .25;
+export const levelsUp = character => !!character && character.rarity !== 'comun';
+export const copiesFor = level => { let total = 0; for (let l = 1; l < level; l++) total += Math.ceil(l / 2); return total; };
+export function characterLevel(profile, id) {
+  if (!levelsUp(CHARACTERS.find(c => c.id === id))) return 1;
+  const copies = profile.copies?.[id] || 0;
+  let level = 1;
+  while (level < CHARACTER_MAX_LEVEL && copies >= copiesFor(level + 1)) level++;
+  return level;
+}
+export const powerScale = level => 1 + POWER_STEP * (clamp(Math.floor(level) || 1, 1, CHARACTER_MAX_LEVEL) - 1);
+// Opens one chest into the profile. Unowned prizes of the rolled rarity come first; a repeat
+// of a character that can still level up adds a level step, any other repeat becomes stars.
 export function openChest(profile, type, random = Math.random) {
   const rarity = rollRarity(type, random), pool = PRIZES.filter(p => p.rarity === rarity);
-  const fresh = pool.filter(p => p.type === 'skins' ? !ownsCharacter(profile, p.id) : !profile.trails.includes(p.id));
-  const options = fresh.length ? fresh : pool, prize = options[Math.floor(random() * options.length)];
-  const duplicate = !fresh.length, refund = duplicate ? RARITIES[rarity].refund : 0;
-  if (duplicate) profile.bits += refund; else profile[prize.type].push(prize.id);
-  return { prize, rarity, duplicate, refund };
+  const owned = p => p.type === 'skins' ? ownsCharacter(profile, p.id) : profile.trails.includes(p.id);
+  const growing = p => p.type === 'skins' && levelsUp(p) && owned(p) && characterLevel(profile, p.id) < CHARACTER_MAX_LEVEL;
+  const fresh = pool.filter(p => !owned(p)), repeats = pool.filter(growing);
+  const options = fresh.length && !(repeats.length && random() < REPEAT_CHANCE) ? fresh : repeats.length ? repeats : pool;
+  const prize = options[Math.floor(random() * options.length)];
+  if (!owned(prize)) { profile[prize.type].push(prize.id); return { prize, rarity, duplicate: false, refund: 0 }; }
+  if (growing(prize)) {
+    const before = characterLevel(profile, prize.id);
+    profile.copies = { ...profile.copies, [prize.id]: (profile.copies?.[prize.id] || 0) + 1 };
+    const level = characterLevel(profile, prize.id);
+    return { prize, rarity, duplicate: true, refund: 0, level, levelUp: level > before };
+  }
+  const refund = RARITIES[rarity].refund;
+  profile.bits += refund;
+  return { prize, rarity, duplicate: true, refund };
 }
 // Bots pick distinct characters; rarer ones show up less often.
 const BOT_WEIGHTS = { comun: 40, raro: 30, epico: 18, legendario: 9, mitico: 3 };
@@ -229,7 +269,7 @@ export class Arena {
     this.wallRange = 40 / CELL_PIXELS;
     this.events = []; this.orbs = []; this.projectiles = []; this.time = 0; this.revision = 0; this.orbRevision = 0;
     this.ended = false; this.won = false; this.bits = 0; this.xp = 0; this.respawnAt = 0;
-    const humans = (options.humans || [{ skin: profile.skin, color: TRAILS.find(t => t.id === profile.trail)?.color || COLORS[0], name: 'Tú' }]).slice(0, MAX_PLAYERS);
+    const humans = (options.humans || [{ skin: profile.skin, color: TRAILS.find(t => t.id === profile.trail)?.color || COLORS[0], name: 'Tú', level: characterLevel(profile, profile.skin) }]).slice(0, MAX_PLAYERS);
     const cast = humans.map(h => characterFor(h.skin));
     for (let id = humans.length; id < SPAWNS.length; id++) cast.push(this.botCharacter(cast));
     // Every actor needs a distinct trail color; humans keep theirs unless it is already taken.
@@ -241,7 +281,9 @@ export class Arena {
       x: x + .5, y: y + .5, angle: -Math.PI / 2, desired: -Math.PI / 2,
       alive: true, trail: [], count: 0, kills: 0, best: 0, bits: 0, xp: 0, lastCell: cell(x, y),
       timers: {}, ready: {}, aiAt: 0, route: [], skin: cast[id].id, rarity: cast[id].rarity, powers: [...cast[id].powers],
-      stunUntil: 0, frozenUntil: 0, harvestUntil: 0, lastKiller: -1, wallSurge: false, wallSparkAt: 0
+      stunUntil: 0, frozenUntil: 0, harvestUntil: 0, lastKiller: -1, wallSurge: false, wallSparkAt: 0,
+      // Robots play at level 1; a human's character level stretches its powers.
+      reach: powerScale(id < humans.length ? humans[id].level : 1)
     }));
     for (const actor of this.actors) { this.seed(actor); actor.best = actor.count; }
     for (let i = 0; i < 45; i++) this.spawnOrb();
@@ -278,7 +320,7 @@ export class Arena {
       Object.assign(actor, {
         name: character.name, skin: character.id, rarity: character.rarity, powers: [...character.powers],
         x: spot.x + .5, y: spot.y + .5, angle, desired: angle, alive: true, trail: [], kills: 0, lastCell: cell(spot.x, spot.y),
-        timers: {}, ready: {}, aiAt: 0, route: [], stunUntil: 0, frozenUntil: 0, harvestUntil: 0, wallSurge: false
+        timers: {}, ready: {}, aiAt: 0, route: [], stunUntil: 0, frozenUntil: 0, harvestUntil: 0, wallSurge: false, reach: 1
       });
       this.seed(actor); actor.best = actor.count;
       this.emit('spawn', { id: actor.id, x: actor.x, y: actor.y });
@@ -327,13 +369,14 @@ export class Arena {
     const actor = this.actors[id], definition = POWERS[skill];
     if (!actor?.alive || !definition || this.ended || (actor.ready[skill] || 0) > this.time) return false;
     if (!actor.powers?.includes(skill)) return false;
-    actor.timers[skill] = this.time + definition.duration;
+    const reach = actor.reach || 1;
+    actor.timers[skill] = this.time + definition.duration * (skill === 'dash' || skill === 'shield' || skill === 'ghost' ? reach : 1);
     actor.ready[skill] = this.time + this.cooldown(actor, skill);
     this.emit('ability', { id, skill, x: actor.x, y: actor.y });
-    if (skill === 'shoot') this.projectiles.push({ owner: id, x: clamp(actor.x + Math.cos(actor.angle) * .9, .01, WIDTH - .01), y: clamp(actor.y + Math.sin(actor.angle) * .9, .01, HEIGHT - .01), angle: actor.angle, life: SHOT_LIFE });
-    if (skill === 'bomb') this.splash(actor, cell(actor.x, actor.y), 3.6, 'bomb');
+    if (skill === 'shoot') this.projectiles.push({ owner: id, x: clamp(actor.x + Math.cos(actor.angle) * .9, .01, WIDTH - .01), y: clamp(actor.y + Math.sin(actor.angle) * .9, .01, HEIGHT - .01), angle: actor.angle, life: SHOT_LIFE * reach, paint: SHOT_PAINT * reach });
+    if (skill === 'bomb') this.splash(actor, cell(actor.x, actor.y), 3.6 * reach, 'bomb');
     if (skill === 'freeze') {
-      for (const other of this.actors) if (other !== actor && other.alive && !this.active(other, 'shield') && Math.hypot(other.x - actor.x, other.y - actor.y) < 8) {
+      for (const other of this.actors) if (other !== actor && other.alive && !this.active(other, 'shield') && Math.hypot(other.x - actor.x, other.y - actor.y) < 8 * reach) {
         other.stunUntil = other.frozenUntil = this.time + FREEZE_TIME;
       }
       this.emit('freeze', { id, x: actor.x, y: actor.y });
@@ -443,7 +486,7 @@ export class Arena {
     if (!actor.alive || index === actor.lastCell) return;
     actor.lastCell = index;
     // Rodillo: paint a 3×3 brush directly instead of leaving an exposed trail.
-    if (this.active(actor, 'paint') && this.grid[index] !== actor.id) { this.splash(actor, index, 1.5); return; }
+    if (this.active(actor, 'paint') && this.grid[index] !== actor.id) { this.splash(actor, index, 1.5 * (actor.reach || 1)); return; }
     // Self-crossings are harmless. Masks allow overlapping trails without erasing rivals.
     if (this.grid[index] === actor.id) { if (actor.trail.length) this.capture(actor); }
     else {
@@ -550,7 +593,7 @@ export class Arena {
       if (done) {
         const x = clamp(nx, .01, WIDTH - .01), y = clamp(ny, .01, HEIGHT - .01);
         this.projectiles.splice(i, 1); this.emit('splat', { x, y, color: owner.color });
-        if (owner.alive && !this.ended) this.splash(owner, cell(x, y), SHOT_PAINT, 'shot');
+        if (owner.alive && !this.ended) this.splash(owner, cell(x, y), shot.paint || SHOT_PAINT, 'shot');
       }
       if (this.ended) return;
     }
@@ -592,7 +635,7 @@ export class Arena {
       if (!actor.alive || this.ended) continue;
       for (let i = this.orbs.length - 1; i >= 0; i--) {
         const orb = this.orbs[i], distance = Math.hypot(orb.x - actor.x, orb.y - actor.y);
-        if (this.active(actor, 'magnet') && distance < 14) {
+        if (this.active(actor, 'magnet') && distance < 14 * (actor.reach || 1)) {
           const move = Math.min(distance, dt * 12);
           orb.x += (actor.x - orb.x) / (distance || 1) * move; this.orbRevision++;
           orb.y += (actor.y - orb.y) / (distance || 1) * move;

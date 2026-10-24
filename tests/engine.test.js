@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange } from '../engine.js';
+import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale } from '../engine.js';
 import { Renderer } from '../renderer.js';
 
 function clean(arena = new Arena()) {
@@ -228,6 +228,36 @@ test('chests roll their rarity table, prefer new prizes and refund repeats with 
   const before = profile.bits, repeat = openChest(profile, 'comun', () => 0);
   assert.ok(repeat.duplicate); assert.equal(profile.bits - before, RARITIES.comun.refund);
 });
+test('rare and better characters level up with repeats, up to level 10', () => {
+  assert.equal(copiesFor(1), 0); assert.equal(copiesFor(2), 1); assert.equal(copiesFor(3), 2); assert.equal(copiesFor(CHARACTER_MAX_LEVEL), 25);
+  const profile = freshProfile();
+  profile.skins = ['abeja']; // a rare character (Imán)
+  assert.equal(characterLevel(profile, 'abeja'), 1);
+  // Rare chest, rare rarity; the second roll (< REPEAT_CHANCE) asks for a repeat.
+  const rolls = [.5, 0, 0]; let r = 0;
+  const repeat = openChest(profile, 'raro', () => rolls[r++ % rolls.length]);
+  assert.ok(repeat.duplicate && repeat.prize.id === 'abeja' && repeat.levelUp && repeat.level === 2, JSON.stringify(repeat));
+  assert.equal(profile.copies.abeja, 1); assert.equal(characterLevel(profile, 'abeja'), 2);
+  profile.copies.abeja = copiesFor(CHARACTER_MAX_LEVEL);
+  assert.equal(characterLevel(profile, 'abeja'), CHARACTER_MAX_LEVEL);
+  // At the top level a repeat turns into stars again; commons never level up.
+  assert.equal(characterLevel(profile, 'interceptor'), 1); assert.equal(levelsUp(CHARACTERS.find(c => c.id === 'interceptor')), false);
+  // Each level stretches the reach of the powers by 6%.
+  assert.equal(powerScale(1), 1); assert.ok(Math.abs(powerScale(10) - 1.54) < 1e-9);
+  assert.deepEqual(parseProfile(JSON.stringify(profile)).copies, { abeja: 25 });
+  assert.throws(() => parseProfile(JSON.stringify({ ...profile, copies: { interceptor: 2 } })), 'commons cannot have levels');
+});
+test('a higher character level reaches further: bigger bomb, longer shot', () => {
+  const bombed = level => {
+    const profile = Object.assign(freshProfile(), { skins: ['fenix'], skin: 'fenix', copies: { fenix: copiesFor(level) } });
+    const arena = clean(new Arena(profile)), actor = arena.actors[0];
+    actor.x = 40.5; actor.y = 40.5; arena.ability(0, 'bomb');
+    return { cells: actor.count, shot: (arena.ability(0, 'shoot'), arena.projectiles[0].life) };
+  };
+  const low = bombed(1), high = bombed(CHARACTER_MAX_LEVEL);
+  assert.ok(high.cells > low.cells * 1.5, `level 10 bomb paints more: ${low.cells} → ${high.cells}`);
+  assert.ok(high.shot > low.shot, 'level 10 shots fly further');
+});
 test('solo: more than half is a victory, but the match only ends at 100% or when caught', () => {
   const arena = clean();
   for (let i = 0; i < SIZE / 2; i++) arena.assign(i, 0);
@@ -294,6 +324,11 @@ test('ranks: 10 ranks with 3 divisions, trophies per match never below zero', ()
   assert.ok(rankChange({ stars: 0 }) < 0); assert.ok(rankChange({ stars: 3, kills: 2 }) > rankChange({ stars: 1 }));
   assert.equal(rankChange({ stars: 3, perfect: true }) - rankChange({ stars: 3 }), 20);
   assert.equal(rankChange({ stars: 1, place: 1, players: 7 }) - rankChange({ stars: 1 }), 8);
+  // A save from before the ranks starts with trophies from its past results.
+  const veteran = { ...freshProfile(), wins: 10, totalKills: 30, best: 42.5 }; delete veteran.points;
+  assert.equal(parseProfile(JSON.stringify(veteran)).points, 10 * 12 + 30 * 2 + 42);
+  assert.equal(parseProfile(JSON.stringify({ ...veteran, wins: 999 })).points, 1000, 'capped');
+  assert.equal(freshProfile().points, 0, 'new players start at zero');
   const profile = Object.assign(freshProfile(), { points: 321 });
   assert.equal(parseProfile(JSON.stringify(profile)).points, 321);
   assert.throws(() => parseProfile(JSON.stringify({ ...profile, points: -5 })));

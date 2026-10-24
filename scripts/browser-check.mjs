@@ -64,6 +64,12 @@ try {
     await evaluate(`document.querySelector('.tab[data-tab="${tab}"]').click()`); await sleep(350);
     await screenshot(`preview-${tab}.png`);
   }
+  // Rare and better characters show their level, repeats and extra reach.
+  await evaluate(`document.querySelector('.tab[data-tab="collection"]').click()`); await sleep(300);
+  assert.equal(await evaluate('Boolean(document.querySelector("[data-skin=tron]").closest("article").querySelector(".char-level"))'), true, 'an owned rare character shows its level');
+  await evaluate('document.querySelector("[data-skin=tron]").closest("article").scrollIntoView({ block: "center" })'); await sleep(200);
+  await screenshot('preview-collection-level.png');
+  await evaluate(`document.querySelector('.tab[data-tab="ranks"]').click()`); await sleep(300);
   await evaluate('document.querySelector("[data-ranks=ladder]").click()'); await sleep(200);
   assert.equal(await evaluate('document.querySelectorAll(".ladder-tier").length'), 30, 'the ladder lists 10 ranks with 3 divisions');
   await screenshot('preview-ranks-ladder.png');

@@ -1,6 +1,6 @@
 // Authoritative online rooms. The server runs the same engine as solo games and
 // streams compact deltas; phones only send their heading and power presses.
-import { Arena, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, freshProfile, cleanName } from './engine.js';
+import { Arena, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, CHARACTER_MAX_LEVEL, freshProfile, cleanName } from './engine.js';
 
 export const STEP = 1 / 90;
 // 30 updates per second keep online movement smooth on phones.
@@ -11,6 +11,8 @@ const WORDS = ['GATO', 'PATO', 'SAPO', 'LUNA', 'NUBE', 'OSO', 'PEZ', 'SOL', 'RAN
 export const FLAG_POWERS = ['dash', 'shield', 'ghost', 'paint', 'magnet'];
 export const FROZEN = 32, WALL = 64, HUMAN = 128;
 const validSkin = id => CHARACTERS.some(c => c.id === id) ? id : CHARACTERS[0].id;
+// The phone reports its character's level (1–10); anything else counts as level 1.
+const validLevel = level => Number.isInteger(level) && level >= 1 && level <= CHARACTER_MAX_LEVEL ? level : 1;
 const validColor = color => [...TRAILS.map(t => t.color), ...COLORS].includes(color) ? color : COLORS[0];
 const normalizeCode = code => String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
 // Players are shown with their nickname, or their character's name if they have none.
@@ -70,7 +72,7 @@ class Room {
     if (this.state !== 'lobby' || !this.members.length) return;
     const names = uniqueNames(this.members), profile = freshProfile();
     profile.easy = this.host?.easy === true;
-    const arena = this.arena = new Arena(profile, Math.random, { humans: this.members.map((m, i) => ({ skin: m.skin, color: m.color, name: names[i] })), timeLimit: this.hub.options.matchSeconds });
+    const arena = this.arena = new Arena(profile, Math.random, { humans: this.members.map((m, i) => ({ skin: m.skin, color: m.color, name: names[i], level: m.level })), timeLimit: this.hub.options.matchSeconds });
     arena.changes = new Set();
     this.ids = new Map(this.members.map((m, i) => [m, i]));
     this.sent = arena.actors.map(() => ({ length: 0, first: -1 }));
@@ -144,7 +146,7 @@ export class Hub {
   constructor(options = {}) { this.options = { ...DEFAULTS, ...options }; this.rooms = new Map(); }
   // `socket` only needs send(text). Returns the handlers for incoming messages and close.
   connect(socket) {
-    const client = { socket, room: null, name: '', skin: CHARACTERS[0].id, color: COLORS[0], easy: false, messages: 0, window: Date.now() };
+    const client = { socket, room: null, name: '', level: 1, skin: CHARACTERS[0].id, color: COLORS[0], easy: false, messages: 0, window: Date.now() };
     return { message: raw => this.message(client, raw), close: () => client.room?.remove(client) };
   }
   sendRaw(client, text) { try { client.socket.send(text); } catch { /* A broken socket is cleaned up by its close event. */ } }
@@ -158,7 +160,7 @@ export class Hub {
     if (!data || typeof data.t !== 'string') return;
     if (data.t === 'quick' || data.t === 'create' || data.t === 'join') {
       client.room?.remove(client);
-      Object.assign(client, { name: cleanName(data.name), skin: validSkin(data.skin), color: validColor(data.color), easy: data.easy === true });
+      Object.assign(client, { name: cleanName(data.name), level: validLevel(data.level), skin: validSkin(data.skin), color: validColor(data.color), easy: data.easy === true });
     }
     if (data.t === 'quick') this.quick(client);
     else if (data.t === 'create') this.create(client);

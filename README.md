@@ -67,6 +67,17 @@ Hay 37 personajes dibujados por código (`CHARACTERS` en `engine.js`): 12 comune
 
 Los bots también reciben personajes al azar (los raros aparecen menos) y usan sus poderes. En modo fácil solo salen comunes y raros, y nunca disparan ni congelan. Turbo y Wall Surge se combinan: ×1,6 ×1,35 = ×2,16. Recoger una estrella da 4 Bits, 2 XP y un borde extra de una celda en los cierres durante 10 segundos.
 
+## Niveles de personaje
+
+Los personajes **raros, épicos, legendarios y míticos** suben de nivel, del 1 al 10, con los repetidos que salen en los cofres (`characterLevel` y `copiesFor` en `engine.js`). Para pasar del nivel *n* al *n*+1 hacen falta ⌈*n*/2⌉ repetidos: 25 en total hasta el nivel 10. Cada nivel aumenta un **6 % el alcance** de sus poderes (+54 % en el nivel 10):
+
+- Distancia: alcance del Disparo y de su pintura, radio de la Bomba, de Congelar, del Imán y del pincel del Rodillo.
+- Duración, en los poderes sin distancia: Turbo, Burbuja y Fantasma.
+
+Mientras queden premios nuevos en la rareza sorteada, 1 de cada 4 cofres da un repetido de un personaje tuyo que aún pueda subir. Los comunes no suben de nivel; sus repetidos, igual que los de un personaje en el nivel 10 o los de un color, se devuelven en estrellas. Los robots juegan siempre a nivel 1. En línea, el teléfono envía el nivel y el servidor solo acepta valores del 1 al 10. La colección muestra el nivel, los repetidos que faltan y el alcance extra.
+
+La foto de perfil (arriba a la izquierda y en el ranking mundial) es el personaje elegido en ese momento.
+
 ## Cofres
 
 | Cofre | Precio | Común | Raro | Épico | Legendario | Mítico |
@@ -90,11 +101,11 @@ Gato Rayo se regala en el nivel 2, Platillo Zum en el 5 y Dragoncito en el 10 (t
 
 ## Rangos y ranking mundial
 
-Cada partida da o quita **copas 🏆** (`rankChange` en `engine.js`): −6 sin estrellas; +4, +10 o +18 con 1, 2 o 3 estrellas; +2 por cada rival atrapado (hasta 5); +20 por pintar todo el mapa. En línea, además, +8 al primero, +3 del 2.º al 3.º y −3 al último. Las copas nunca bajan de cero.
+Cada partida da o quita **copas 🏆** (`rankChange` en `engine.js`): −6 sin estrellas; +4, +10 o +18 con 1, 2 o 3 estrellas; +2 por cada rival atrapado (hasta 5); +20 por pintar todo el mapa. En línea, además, +8 al primero, +3 del 2.º al 3.º y −3 al último. Las copas nunca bajan de cero. Los perfiles de antes de los rangos empiezan con copas según lo que ya habían conseguido (`startingPoints`: 12 por victoria, 2 por rival atrapado y el porcentaje de su mejor zona, como mucho 1.000).
 
 Hay **10 rangos con 3 niveles cada uno** (30 en total): Bronce, Plata, Oro, Platino, Esmeralda, Rubí, Diamante, Maestro, Gran Maestro y Leyenda, del 1 al 3. Cada nivel empieza en `40·n + 4·n²` copas (Bronce 2 en 44, Plata 1 en 156, Leyenda 3 en 4.524), así que cada uno pide un poco más que el anterior. Los emblemas son escudos SVG dibujados por código, con corona a partir de Maestro.
 
-La pestaña **Rangos** muestra tu emblema, el avance al siguiente nivel, la escalera completa y el **ranking mundial**: los 50 jugadores con más copas. Para aparecer en él hay que entrar con Google. Cada jugador tiene una fila pública en Firestore, `ranking/{uid}` (nombre, copas y personaje), que se actualiza al terminar cada partida. Las reglas de `firestore.rules` dejan leerla a cualquiera y escribir solo la propia. Como las copas se calculan en el teléfono, alguien con conocimientos podría inflarlas; para evitarlo habría que calcularlas en el servidor.
+La pestaña **Rangos** muestra tu emblema, el avance al siguiente nivel, la escalera completa y el **ranking mundial**: los 50 jugadores con más copas. Para aparecer en él hay que entrar con Google. Cada jugador tiene una fila pública en Firestore, `ranking/{uid}` (nombre, copas y personaje), que se actualiza al abrir el juego con la sesión iniciada, al cambiar de nombre y al terminar cada partida. Quien nunca ha entrado con Google no tiene fila: en Firestore solo existen los jugadores con cuenta. Las reglas de `firestore.rules` dejan leerla a cualquiera y escribir solo la propia. Como las copas se calculan en el teléfono, alguien con conocimientos podría inflarlas; para evitarlo habría que calcularlas en el servidor.
 
 ## Música
 

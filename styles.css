@@ -538,10 +538,6 @@ body.spectating .abilities { display:none!important }
 .side-badge>span .ui-icon { width:82%; height:82% }
 .play-button.home span .ui-icon { width:62px; height:62px }
 #sound[aria-pressed="false"] .ui-icon { filter:grayscale(.8); opacity:.55 }
-/* The level art is already a bubble: no frame; the real level covers the number drawn on it. */
-.level-badge { border:0; background:none; box-shadow:none }
-.level-badge img { border-radius:0; filter:drop-shadow(0 3px 0 var(--ink)) }
-.level-badge span { left:50%; right:auto; bottom:-4px; transform:translateX(-50%) }
 @media(orientation:landscape) and (max-height:560px) { .play-button.home span .ui-icon { width:50px; height:50px } }
 
 /* Always landscape: a phone held upright in a browser gets the whole game turned 90°
@@ -583,3 +579,13 @@ body.in-match { touch-action:none; overscroll-behavior:none }
   .rank-hero { margin-top:4px } .rank-emblem svg { width:80px; height:80px } .rank-info>b { font-size:26px }
   .ladder-tier svg { width:42px; height:42px } .ladder-tier b { font-size:14px }
 }
+
+/* Character levels (rare and better): level chip, repeats towards the next level, extra reach */
+.level-chip { display:inline-block; padding:0 8px; border:3px solid var(--ink); border-radius:99px; background:linear-gradient(#fff6a8,var(--yellow)); font:14px/20px var(--display); color:var(--ink); -webkit-text-stroke:0; vertical-align:middle }
+.char-level { display:flex; flex-direction:column; align-items:center; gap:3px; margin:4px 8px 0 }
+.char-level .copies { position:relative; width:100%; max-width:150px; height:20px; border:3px solid var(--ink); border-radius:99px; background:#1d2a8c; overflow:hidden }
+.char-level .copies i { display:block; height:100%; background:linear-gradient(#8ff067,#43c41f) }
+.char-level .copies b { position:absolute; inset:0; display:grid; place-items:center; font:12px var(--display); color:#fff; -webkit-text-stroke:3px var(--ink); paint-order:stroke fill }
+.char-level small { font-size:12px; font-weight:800; opacity:.85 }
+.crate-reward .char-level small { color:#fff; opacity:1 }
+.rank-avatar { flex:none; width:40px; height:40px; border:3px solid var(--ink); border-radius:50%; background:#e8f0ff }
