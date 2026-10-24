@@ -145,7 +145,7 @@ export function crossedCells(x0, y0, x1, y1) {
 export const emptyChests = () => Object.fromEntries(Object.keys(CHESTS).map(type => [type, 0]));
 export function freshProfile() {
   // New players start with a rare chest so their first character with a power is one tap away.
-  return { version: 1, name: '', updatedAt: 0, points: 0, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], copies: {}, easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0 };
+  return { version: 1, name: '', updatedAt: 0, points: 0, ranked: true, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], copies: {}, easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0 };
 }
 // Player nicknames: 3 to 14 letters, digits, spaces, "_" or "-". Returns '' when unusable.
 export function cleanName(text) {
@@ -195,9 +195,12 @@ export function parseProfile(raw) {
       if (value) result.copies[id] = Math.floor(value);
     }
   }
-  // Saves from before the ranks start with trophies earned from their past results.
   if (data.points !== undefined) { if (!count(data.points) || data.points > 1e6) throw new Error('Copas inválidas'); result.points = Math.floor(data.points); }
-  else result.points = startingPoints(result);
+  // Once per profile, trophies are raised to what its past results earn (`ranked` marks it
+  // done), so saves from before the ranks do not start from zero. Taking the larger value
+  // never counts a victory twice.
+  if (data.ranked !== true) result.points = Math.max(result.points, startingPoints(result));
+  result.ranked = true;
   return { ...result, name: cleanName(data.name), easy: data.easy === true, nemesis: typeof data.nemesis === 'string' ? data.nemesis.slice(0, 40) : '', skin: data.skin, trail: data.trail };
 }
 // Every chest prize: characters (except the starter) and the special trail colors.

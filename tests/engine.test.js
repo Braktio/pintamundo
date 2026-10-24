@@ -325,10 +325,14 @@ test('ranks: 10 ranks with 3 divisions, trophies per match never below zero', ()
   assert.equal(rankChange({ stars: 3, perfect: true }) - rankChange({ stars: 3 }), 20);
   assert.equal(rankChange({ stars: 1, place: 1, players: 7 }) - rankChange({ stars: 1 }), 8);
   // A save from before the ranks starts with trophies from its past results.
-  const veteran = { ...freshProfile(), wins: 10, totalKills: 30, best: 42.5 }; delete veteran.points;
+  const veteran = { ...freshProfile(), wins: 10, totalKills: 30, best: 42.5 }; delete veteran.points; delete veteran.ranked;
   assert.equal(parseProfile(JSON.stringify(veteran)).points, 10 * 12 + 30 * 2 + 42);
   assert.equal(parseProfile(JSON.stringify({ ...veteran, wins: 999 })).points, 1000, 'capped');
   assert.equal(freshProfile().points, 0, 'new players start at zero');
+  // A profile that already had a few trophies before the seeding is raised once, not twice.
+  const early = parseProfile(JSON.stringify({ ...veteran, points: 10 }));
+  assert.equal(early.points, 222); assert.equal(early.ranked, true);
+  assert.equal(parseProfile(JSON.stringify({ ...early, points: 5 })).points, 5, 'later losses are kept');
   const profile = Object.assign(freshProfile(), { points: 321 });
   assert.equal(parseProfile(JSON.stringify(profile)).points, 321);
   assert.throws(() => parseProfile(JSON.stringify({ ...profile, points: -5 })));

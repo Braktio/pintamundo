@@ -101,7 +101,7 @@ Gato Rayo se regala en el nivel 2, Platillo Zum en el 5 y Dragoncito en el 10 (t
 
 ## Rangos y ranking mundial
 
-Cada partida da o quita **copas 🏆** (`rankChange` en `engine.js`): −6 sin estrellas; +4, +10 o +18 con 1, 2 o 3 estrellas; +2 por cada rival atrapado (hasta 5); +20 por pintar todo el mapa. En línea, además, +8 al primero, +3 del 2.º al 3.º y −3 al último. Las copas nunca bajan de cero. Los perfiles de antes de los rangos empiezan con copas según lo que ya habían conseguido (`startingPoints`: 12 por victoria, 2 por rival atrapado y el porcentaje de su mejor zona, como mucho 1.000).
+Cada partida da o quita **copas 🏆** (`rankChange` en `engine.js`): −6 sin estrellas; +4, +10 o +18 con 1, 2 o 3 estrellas; +2 por cada rival atrapado (hasta 5); +20 por pintar todo el mapa. En línea, además, +8 al primero, +3 del 2.º al 3.º y −3 al último. Las copas nunca bajan de cero. Una sola vez por perfil (lo marca `ranked`), las copas suben hasta lo que vale su historial (`startingPoints`: 12 por victoria, 2 por rival atrapado y el porcentaje de su mejor zona, como mucho 1.000). Así, los perfiles de antes de los rangos no empiezan en cero, y como se toma el valor mayor, nada cuenta dos veces.
 
 Hay **10 rangos con 3 niveles cada uno** (30 en total): Bronce, Plata, Oro, Platino, Esmeralda, Rubí, Diamante, Maestro, Gran Maestro y Leyenda, del 1 al 3. Cada nivel empieza en `40·n + 4·n²` copas (Bronce 2 en 44, Plata 1 en 156, Leyenda 3 en 4.524), así que cada uno pide un poco más que el anterior. Los emblemas son escudos SVG dibujados por código, con corona a partir de Maestro.
 
