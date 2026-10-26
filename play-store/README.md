@@ -2,11 +2,15 @@
 
 Material para la ficha de Play Console. Las imágenes se regeneran con `node scripts/store-shots.mjs "ruta/a/chrome.exe"`.
 
+El vídeo se genera con `node scripts/store-video.mjs "ruta/a/chrome.exe" "ruta/a/ffmpeg.exe"` (necesita Windows para la voz en español) y el banner con `node scripts/youtube-banner.mjs "ruta/a/chrome.exe"`.
+
 | Archivo | Uso en Play Console | Tamaño |
 | --- | --- | --- |
 | `icon-512.png` | Icono de la aplicación | 512 × 512 |
 | `feature-graphic.png` | Gráfico de funciones | 1024 × 500 |
 | `01-inicio.png` … `08-niveles.png` | Capturas de pantalla del teléfono (horizontal, con título), las 8 que admite Play | 1920 × 1080 |
+| `pintamundo-video.mp4` (no se guarda en git) | Vídeo promocional con voz y música del juego: súbelo a YouTube y pega el enlace en «Video» | 1920 × 1080, 30 s |
+| `youtube-banner.png` | Banner del canal de YouTube (título dentro de la zona segura de 1546 × 423) | 2560 × 1440 |
 
 El archivo que se sube es **`pintamundo.aab`**, de la versión fija «apk» de GitHub Releases. Lo genera GitHub Actions en cada cambio.
 

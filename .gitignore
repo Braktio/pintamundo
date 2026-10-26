@@ -10,3 +10,4 @@ android/local.properties
 *.apk
 *.keystore
 firma-android/
+play-store/*.mp4
