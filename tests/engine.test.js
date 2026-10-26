@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays, START_CHARGE, PROGRESS_EPOCH, fillChestBar, levelChest, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonStart, seasonReward, FIRST_SEASON, FREE_CHEST_HOURS } from '../engine.js';
+import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays, START_CHARGE, PROGRESS_EPOCH, fillChestBar, levelChest, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonStart, seasonReward, FIRST_SEASON, FREE_CHEST_HOURS, isChild, ageGroupFor } from '../engine.js';
 import { Renderer } from '../renderer.js';
 
 function clean(arena = new Arena()) {
@@ -536,4 +536,20 @@ test('cell changes can be tracked for network deltas', () => {
   arena.changes = new Set();
   arena.assign(cell(5, 5), 0); arena.assign(cell(5, 5), 0);
   assert.deepEqual([...arena.changes], [cell(5, 5)]);
+});
+
+test('neutral age screen: only players surely 13 or older leave child mode', () => {
+  const now = new Date('2026-10-26T12:00:00Z');
+  assert.equal(ageGroupFor(2016, now), 'child', 'born 10 years ago');
+  assert.equal(ageGroupFor(2013, now), 'child', 'born 13 years ago may still be 12');
+  assert.equal(ageGroupFor(2012, now), 'teen', 'born 14 years ago is at least 13');
+  assert.equal(isChild(freshProfile()), true, 'unknown age counts as a child (no ads, no sign-in)');
+  assert.equal(isChild({ ...freshProfile(), ageGroup: 'teen' }), false);
+});
+test('the age group and the claimed season survive a save, and bad values are dropped', () => {
+  const profile = { ...freshProfile(), ageGroup: 'teen', seasonClaimed: '2026-09' };
+  const loaded = parseProfile(JSON.stringify(profile));
+  assert.equal(loaded.ageGroup, 'teen');
+  assert.equal(loaded.seasonClaimed, '2026-09', 'season rewards are not claimed twice after reloading');
+  assert.equal(parseProfile(JSON.stringify({ ...profile, ageGroup: 'adult' })).ageGroup, '');
 });

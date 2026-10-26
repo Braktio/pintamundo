@@ -45,7 +45,7 @@ try {
   await page('Runtime.enable'); await page('Page.enable');
   await page('Page.addScriptToEvaluateOnNewDocument', { source: 'let randomSeed=482;Math.random=()=>{randomSeed=(Math.imul(randomSeed,1664525)+1013904223)>>>0;return randomSeed/4294967296;};' });
   // Start as Gato Rayo (rare, Turbo) so the power button can be exercised.
-  await page('Page.addScriptToEvaluateOnNewDocument', { source: "if(!localStorage.getItem('neon-frontier.profile.v1'))localStorage.setItem('neon-frontier.profile.v1',JSON.stringify({version:1,epoch:2,name:'Prueba',bits:0,xp:2419,wins:0,totalKills:0,best:0,nemesis:'',skin:'tron',trail:'cyan',skins:[],trails:['cyan'],easy:false,chests:{comun:0,raro:1,epico:0,legendario:0},freeChestAt:0}));" });
+  await page('Page.addScriptToEvaluateOnNewDocument', { source: "if(!localStorage.getItem('neon-frontier.profile.v1'))localStorage.setItem('neon-frontier.profile.v1',JSON.stringify({version:1,epoch:2,ageGroup:'teen',name:'Prueba',bits:0,xp:2419,wins:0,totalKills:0,best:0,nemesis:'',skin:'tron',trail:'cyan',skins:[],trails:['cyan'],easy:false,chests:{comun:0,raro:1,epico:0,legendario:0},freeChestAt:0}));" });
   await page('Page.navigate', { url: base });
   for (let i = 0; i < 30; i++) { if (await evaluate('document.querySelectorAll(".hangar-card").length') > 30) break; await sleep(150); }
   assert.deepEqual(errors, []);
@@ -132,7 +132,7 @@ try {
   assert.equal(await evaluate('Boolean(document.getElementById("retry"))'), true, 'the last chest shows the match buttons');
   assert.equal(await evaluate('Object.values(JSON.parse(localStorage.getItem("neon-frontier.profile.v1")).chests).reduce((a, b) => a + b, 0)'), 1, 'every chest won is opened and spent (the starting rare one stays)');
   // Load a profile fixture to verify crate spending, reward reveal and persistence.
-  const fixture = await evaluate('(async()=>{const m=await import("./engine.js");const p=m.freshProfile();p.bits=1200;p.xp=1000;p.skin="tron";return p;})()');
+  const fixture = await evaluate('(async()=>{const m=await import("./engine.js");const p=m.freshProfile();p.ageGroup="teen";p.bits=1200;p.xp=1000;p.skin="tron";return p;})()');
   await page('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('neon-frontier.profile.v1', ${JSON.stringify(JSON.stringify(fixture))});` });
   await page('Page.reload'); await sleep(500);
   // A profile without a nickname is asked to create one before playing.
@@ -195,6 +195,23 @@ try {
   await page('Emulation.setDeviceMetricsOverride', { width: 844, height: 390, deviceScaleFactor: 1, mobile: true });
   await sleep(200);
   await screenshot('preview-mobile-landscape.png');
+  // Neutral age screen: a profile without an age is asked once; a child gets no nickname,
+  // no Google account and no ads (Google Play Families policy).
+  await page('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('neon-frontier.profile.v1', ${JSON.stringify(JSON.stringify({ ...fixture, ageGroup: '', name: '' }))});` });
+  await page('Page.reload'); await sleep(600);
+  assert.equal(await until('Boolean(document.getElementById("age-year"))'), true, 'players without an age see the age screen');
+  assert.equal(await evaluate('document.getElementById("age-year").value'), '', 'no year is pre-selected');
+  assert.equal(await evaluate('document.getElementById("age-ok").disabled'), true, 'a year must be chosen');
+  await screenshot('preview-age.png');
+  await key('Escape', 'Escape'); await key('Escape', 'Escape', 'keyUp');
+  assert.equal(await evaluate('Boolean(document.getElementById("age-year"))'), true, 'the age screen cannot be skipped');
+  await evaluate('const s=document.getElementById("age-year");s.value=String(new Date().getFullYear()-10);s.dispatchEvent(new Event("change"));document.getElementById("age-ok").click()');
+  await sleep(400);
+  assert.equal(await evaluate('JSON.parse(localStorage.getItem("neon-frontier.profile.v1")).ageGroup'), 'child', 'only the age group is stored');
+  assert.equal(await evaluate('document.body.classList.contains("child-mode")'), true);
+  assert.equal(await evaluate('Boolean(document.getElementById("name-input"))'), false, 'children are not asked to type a nickname');
+  assert.equal(await evaluate('getComputedStyle(document.getElementById("account-button")).display'), 'none', 'children cannot connect a Google account');
+  assert.equal(await evaluate('document.getElementById("profile-name").textContent'), 'Gato Rayo', 'a child is shown with the character name');
   assert.deepEqual(errors, [], 'desktop and mobile have no runtime errors');
   console.log('Browser OK: HUD, whole-screen touch steering + power with a second finger, minimap on phones, 44px touch targets, capture/rewards/crates, ranks and always-landscape layout.');
   await send('Browser.close');

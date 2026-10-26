@@ -28,7 +28,7 @@
 <body>
 <main>
   <h1>Política de privacidad</h1>
-  <p class="updated">Pintamundo · Última actualización: 23 de octubre de 2026</p>
+  <p class="updated">Pintamundo · Última actualización: 26 de octubre de 2026</p>
 
   <p>Pintamundo es un juego para Android y navegador. Esta política explica qué datos usa el juego, para qué y cómo puedes borrarlos. No vendemos tus datos ni los usamos para publicidad personalizada propia.</p>
 
@@ -36,8 +36,8 @@
   <table>
     <tr><th>Dato</th><th>Para qué</th><th>Dónde se guarda</th></tr>
     <tr><td>Tu progreso: nivel, estrellas, cofres, personajes, misiones y copas</td><td>Que no pierdas tu partida</td><td>En tu teléfono o navegador. Si conectas tu cuenta, también en la nube (Firebase, de Google)</td></tr>
-    <tr><td>El nombre que eliges en el juego</td><td>Que los demás te vean en las partidas en línea y en el ranking</td><td>En tu teléfono y, con cuenta, en la nube</td></tr>
-    <tr><td>Un identificador de tu cuenta de Google (solo si la conectas)</td><td>Saber qué progreso es tuyo y recuperarlo en otro teléfono</td><td>Firebase Authentication. No guardamos tu correo ni tu contraseña</td></tr>
+    <tr><td>El nombre que eliges en el juego (solo a partir de 13 años; los menores aparecen con el nombre de su personaje)</td><td>Que los demás te vean en las partidas en línea y en el ranking</td><td>En tu teléfono y, con cuenta, en la nube</td></tr>
+    <tr><td>Un identificador de tu cuenta de Google (solo si la conectas; a partir de 13 años)</td><td>Saber qué progreso es tuyo y recuperarlo en otro teléfono</td><td>Firebase Authentication. No guardamos tu correo ni tu contraseña</td></tr>
     <tr><td>Tu fila del ranking mundial: nombre, copas y personaje (solo con cuenta)</td><td>Mostrar el ranking a todos los jugadores</td><td>Firebase. Es pública: cualquiera que juegue puede verla</td></tr>
     <tr><td>Lo que haces en una partida en línea: movimientos, poderes y emotes</td><td>Que la partida funcione</td><td>Solo mientras dura la partida, en nuestro servidor (Render). No se guarda después</td></tr>
   </table>
@@ -47,7 +47,7 @@
   <ul>
     <li><b>Google Firebase</b> (inicio de sesión y base de datos): <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">privacidad de Firebase</a>.</li>
     <li><b>Render</b> aloja el servidor de las partidas en línea. Como cualquier servidor web, puede registrar la dirección IP de las conexiones durante un tiempo limitado: <a href="https://render.com/privacy" target="_blank" rel="noopener">privacidad de Render</a>.</li>
-    <li><b>Google AdMob</b>, si la app muestra anuncios: puede usar identificadores del dispositivo para mostrar y medir anuncios. Los anuncios con recompensa solo aparecen cuando tú decides verlos. <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">Cómo usa Google los datos de los anuncios</a>.</li>
+    <li><b>Google AdMob</b>, solo para jugadores de 13 años o más: puede usar identificadores del dispositivo para mostrar y medir anuncios. Los anuncios con recompensa solo aparecen cuando tú decides verlos. Para los menores de 13, AdMob ni siquiera se inicia. <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">Cómo usa Google los datos de los anuncios</a>.</li>
   </ul>
 
   <h2>Notificaciones</h2>
@@ -61,7 +61,15 @@
   </ul>
 
   <h2>Edad</h2>
-  <p>Pintamundo tiene un estilo de dibujos animados, pero no está dirigido a menores de 13 años. Para conectar una cuenta de Google hay que cumplir la edad mínima que Google exige en tu país.</p>
+  <p>Pintamundo está pensado para jugadores desde los 10 años. La primera vez que se abre, el juego pregunta el año de nacimiento. Solo guardamos si el jugador es menor de 13 años o no, nunca el año.</p>
+  <p>Si el jugador tiene <b>menos de 13 años</b> (o no lo ha indicado):</p>
+  <ul>
+    <li>No se muestran anuncios y Google AdMob no se inicia, así que no se envía el identificador de publicidad.</li>
+    <li>No se puede conectar una cuenta de Google: el progreso se guarda solo en el teléfono.</li>
+    <li>No se escribe ningún nombre: en las partidas en línea aparece con el nombre de su personaje.</li>
+    <li>No hay chat; solo emotes de una lista fija.</li>
+  </ul>
+  <p>Para conectar una cuenta de Google hay que tener al menos 13 años o la edad mínima que Google exige en tu país.</p>
 
   <h2>Cambios y contacto</h2>
   <p>Si esta política cambia, actualizaremos esta página y su fecha. Para cualquier pregunta, escribe en <a href="https://github.com/Braktio/pintamundo/issues" target="_blank" rel="noopener">github.com/Braktio/pintamundo/issues</a>.</p>

@@ -1,9 +1,9 @@
-import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, tierStart, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonReward, CHARACTER_MAX_LEVEL, CHEST_BAR, PROGRESS_EPOCH, fillChestBar, levelChest, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
+import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, tierStart, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonReward, CHARACTER_MAX_LEVEL, CHEST_BAR, PROGRESS_EPOCH, fillChestBar, levelChest, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, isChild, ageGroupFor, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
 import { Renderer, shade } from './renderer.js';
 import { Connection, Mirror, defaultServer } from './online.js';
 import * as cloud from './cloud.js';
 import { music } from './music.js';
-import { adReady, watchAd, preloadAd } from './ads.js';
+import { adReady, watchAd, preloadAd, allowAds } from './ads.js';
 
 const $ = id => document.getElementById(id);
 const root = document.documentElement;
@@ -789,7 +789,7 @@ $('dialog').addEventListener('cancel', event => {
   event.preventDefault();
   if (state === 'paused') $('resume')?.click();
   else if (state === 'results' || state === 'lobby') menu();
-  else if (!$('crate-spinner')) $('dialog').close();
+  else if (!$('crate-spinner') && !$('age-year')) $('dialog').close();
 });
 // ---------- Ranks and global ranking ----------
 // Shield emblem of a tier: the rank's colors, its division number, and a crown from Maestro up.
@@ -851,7 +851,7 @@ const wouldPlace = () => leaderboard.status === 'ok' ? leaderboard.rows.filter(r
 // connect it so their trophies count in the world ranking.
 let rankSuggested = false;
 function suggestRankLogin() {
-  if (account || !cloud.available || rankSuggested || state !== 'menu') return;
+  if (account || !cloud.available || rankSuggested || state !== 'menu' || isChild(profile)) return;
   rankSuggested = true;
   dialog(`<p class="eyebrow">🌍 Ranking mundial</p>${rankBadge(rankFor(profile.points).tier, 90)}<h2>¡Compite con todo el mundo!</h2><p>Tienes <b>${number(profile.points)} 🏆</b>, pero sin cuenta no cuentan en el ranking. Conecta tu cuenta de Google para rankear contra otros jugadores; además, tu progreso quedará guardado en la nube.</p><div class="dialog-buttons login-buttons"><button id="rank-suggest-login" class="dialog-button login google">Conectar con Google</button><button id="rank-suggest-later" class="dialog-button secondary">Ahora no</button></div>`);
   $('rank-suggest-login').onclick = signIn;
@@ -924,6 +924,7 @@ function renderRanks() {
 }
 // Friends: players met in private rooms while signed in.
 function renderFriends() {
+  if (!account && isChild(profile)) { $('rank-list').innerHTML = '<p class="rank-note">👫 Juega salas de amigos en 🌐 Jugar en línea con quienes conozcas.</p>'; return; }
   if (!account) { $('rank-list').innerHTML = '<div class="rank-join"><p>👫 Conecta tu cuenta y juega salas de amigos: quienes jueguen contigo aparecerán aquí.</p><button id="rank-login" class="dialog-button login google">Conectar con Google</button></div>'; $('rank-login').onclick = signIn; return; }
   if (!profile.friends.length) { $('rank-list').innerHTML = '<p class="rank-note">👫 Crea una sala de amigos en 🌐 Jugar en línea e invítalos: quienes jueguen contigo con su cuenta aparecerán aquí.</p>'; return; }
   $('rank-list').innerHTML = friendsBoard.status === 'ok' ? rankingList(friendsBoard.rows) : friendsBoard.status === 'error' ? '<p class="rank-note">No pudimos cargar a tus amigos. Revisa tu conexión.</p>' : '<p class="rank-note">Cargando a tus amigos… ⏳</p>';
@@ -973,6 +974,7 @@ let matchStats = { orbs: 0, powers: 0 };
 // The nickname is what other players see online. Cleaned names only contain letters,
 // digits, spaces, "_" and "-", so they are safe to place in HTML.
 function editName(first = false, suggestion = '') {
+  if (isChild(profile)) { if (!first) toast(`En línea te verán como ${characterFor(profile.skin).name}. 🐥`); followInvite(); return; }
   const offerCloud = first && cloud.available && !account;
   dialog(`<p class="eyebrow">${first ? '👋 ¡Bienvenido a Pintamundo!' : '👤 Tu perfil'}</p><h2>${first ? 'Crea tu perfil' : 'Cambia tu nombre'}</h2><p>Así te verán los demás en las partidas en línea.</p><div class="name-row"><input id="name-input" maxlength="14" value="${profile.name || suggestion}" placeholder="Tu nombre" autocomplete="nickname" spellcheck="false" aria-label="Tu nombre"><small>De 3 a 14 letras o números.</small></div><div class="dialog-buttons"><button id="name-save" class="dialog-button">✓ ${first ? '¡LISTO!' : 'Guardar'}</button>${first ? '' : '<button id="name-cancel" class="dialog-button secondary">Cancelar</button>'}</div>${offerCloud ? '<p class="cloud-hint">¿Ya jugabas en otro teléfono?</p><div class="dialog-buttons"><button id="name-cloud" class="dialog-button secondary">☁️ Recuperar mi progreso</button></div>' : ''}`);
   const input = $('name-input');
@@ -988,8 +990,8 @@ function editName(first = false, suggestion = '') {
 }
 $('profile-button').onclick = () => editName();
 function renderAccount() {
-  $('profile-name').textContent = profile.name || 'Elige tu nombre';
-  $('account-button').hidden = !cloud.available;
+  $('profile-name').textContent = isChild(profile) ? characterFor(profile.skin).name : profile.name || 'Elige tu nombre';
+  $('account-button').hidden = !cloud.available || isChild(profile);
   $('account-button').textContent = account ? '☁️ Cuenta de Google' : '☁️ Guardar en mi cuenta';
 }
 function openAccount() {
@@ -1005,6 +1007,7 @@ function openAccount() {
   $('account-close').onclick = () => $('dialog').close();
 }
 async function signIn() {
+  if (isChild(profile)) return;
   try { account = await cloud.signIn(); }
   catch { toast('No se pudo iniciar sesión. Inténtalo de nuevo.'); return; }
   if (!account) return;
@@ -1114,7 +1117,7 @@ async function invite(code) {
 let pendingRoom = new URLSearchParams(location.search).get('sala') || '';
 if (pendingRoom) history.replaceState(null, '', location.pathname);
 function followInvite() {
-  if (!pendingRoom || !profile.name || state !== 'menu') return;
+  if (!pendingRoom || (!profile.name && !isChild(profile)) || state !== 'menu') return;
   const code = pendingRoom; pendingRoom = '';
   toast(`🚪 Entrando a la sala ${code}…`); void joinOnline('join', code);
 }
@@ -1204,7 +1207,7 @@ async function joinOnline(kind, code = '') {
   const character = characterFor(profile.skin);
   const skin = ownsCharacter(profile, character.id) ? character.id : 'interceptor';
   const token = account ? await cloud.idToken().catch(() => '') : '';
-  online.connection.send({ t: kind, v: PROGRESS_EPOCH, code, token, name: profile.name, level: characterLevel(profile, skin), skin, color: playerColor(), easy: profile.easy === true });
+  online.connection.send({ t: kind, v: PROGRESS_EPOCH, code, token, name: isChild(profile) ? '' : profile.name, level: characterLevel(profile, skin), skin, color: playerColor(), easy: profile.easy === true });
 }
 function disconnect() {
   if (!online) return;
@@ -1294,13 +1297,43 @@ if (storageError) toast('No se pudo cargar tu progreso de este teléfono.');
 // The cloud copy is checked first, so a returning player is not asked for a new name;
 // a slow network only delays the question by two seconds.
 // Everyone's progress was reset (a new epoch): explain it once.
-if (profile.resetNotice) {
-  delete profile.resetNotice; save(true);
+// Shown after the age screen, so one dialog never hides the other.
+let resetNoticePending = !!profile.resetNotice;
+if (profile.resetNotice) { delete profile.resetNotice; save(true); }
+function showResetNotice() {
+  if (!resetNoticePending) return false;
+  resetNoticePending = false;
   setTimeout(() => {
     dialog('<p class="eyebrow">🔄 Nueva etapa</p><h2>¡Empezamos de cero!</h2><p>Hemos reiniciado el progreso de todos los jugadores para que el juego sea justo: cofres, estrellas, personajes y copas vuelven a empezar. Conservas tu nombre.</p><p>Ahora los cofres cuestan más de conseguir: las estrellas de cada partida llenan una barra, y cada 12 ganas un cofre.</p><div class="dialog-buttons"><button id="reset-ok" class="dialog-button">¡A JUGAR! ▶</button></div>');
-    $('reset-ok').onclick = () => $('dialog').close();
+    $('reset-ok').onclick = () => { $('dialog').close(); welcome(); };
   }, 600);
+  return true;
 }
-// A rewarded ad starts loading a little after launch, so the offers can appear.
-setTimeout(preloadAd, 3000);
-Promise.race([restoreAccount(), new Promise(resolve => setTimeout(resolve, 2000))]).finally(() => { if (!profile.name && state === 'menu' && !$('dialog').open) editName(true); else followInvite(); });
+// ---------- Neutral age screen (Google Play Families policy, mixed audience) ----------
+// Asked once. It does not suggest an answer, pre-select an adult year or say what changes.
+// Only the resulting group is stored ('child' under 13, 'teen' 13 or older), never the year.
+function askAge(next) {
+  const year = new Date().getFullYear(), years = Array.from({ length: 97 }, (_, i) => year - 3 - i);
+  dialog(`<p class="eyebrow">👋 ¡Hola!</p><h2>¿En qué año naciste?</h2><div class="age-row"><select id="age-year" aria-label="Año de nacimiento"><option value="" selected disabled>Elige el año</option>${years.map(y => `<option value="${y}">${y}</option>`).join('')}</select></div><div class="dialog-buttons"><button id="age-ok" class="dialog-button" disabled>Continuar</button></div>`);
+  $('age-year').onchange = () => { $('age-ok').disabled = !$('age-year').value; };
+  $('age-ok').onclick = () => {
+    const chosen = Number($('age-year').value); if (!chosen) return;
+    profile.ageGroup = ageGroupFor(chosen); save(true);
+    $('dialog').close(); applyAge(); next();
+  };
+}
+// Children (and anyone before answering) get no ads, no Google sign-in and no typed nickname.
+function applyAge() {
+  const child = isChild(profile);
+  document.body.classList.toggle('child-mode', child);
+  allowAds(!child);
+  if (child && account) { account = null; void cloud.signOut().catch(() => {}); }
+  renderAccount(); renderMenu();
+  if (!child) setTimeout(preloadAd, 3000);
+}
+applyAge();
+const welcome = () => { if (showResetNotice()) return; if (!isChild(profile) && !profile.name && state === 'menu' && !$('dialog').open) editName(true); else followInvite(); };
+Promise.race([restoreAccount(), new Promise(resolve => setTimeout(resolve, 2000))]).finally(() => {
+  if (isChild(profile) && account) applyAge();
+  if (!profile.ageGroup && state === 'menu') askAge(welcome); else welcome();
+});

@@ -258,8 +258,16 @@ export function crossedCells(x0, y0, x1, y1) {
 export const emptyChests = () => Object.fromEntries(Object.keys(CHESTS).map(type => [type, 0]));
 export function freshProfile() {
   // New players start with a rare chest so their first character with a power is one tap away.
-  return { version: 1, epoch: PROGRESS_EPOCH, name: '', updatedAt: 0, points: 0, ranked: true, chestBar: 0, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], copies: {}, easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0, daily: { day: '', progress: {}, claimed: [], bonus: false }, streak: { last: '', count: 0 }, friends: [], seasonClaimed: '' };
+  return { version: 1, epoch: PROGRESS_EPOCH, ageGroup: '', name: '', updatedAt: 0, points: 0, ranked: true, chestBar: 0, bits: 0, xp: 0, wins: 0, totalKills: 0, best: 0, nemesis: '', skin: 'interceptor', trail: 'cyan', skins: [], trails: ['cyan'], copies: {}, easy: false, chests: { ...emptyChests(), raro: 1 }, freeChestAt: 0, daily: { day: '', progress: {}, claimed: [], bonus: false }, streak: { last: '', count: 0 }, friends: [], seasonClaimed: '' };
 }
+// Age group from the neutral age screen: 'child' (under 13) or 'teen' (13 or older); '' until
+// answered. Google Play's Families policy treats unknown ages like children, and so does the game:
+// no ads, no Google sign-in and no typed nickname unless the player is 13 or older.
+export const AGE_GROUPS = ['child', 'teen'];
+export const isChild = profile => profile.ageGroup !== 'teen';
+// Only the birth year is asked, so someone born 13 years ago may still be 12: when in doubt,
+// the player counts as a child (the safer side for the Families policy).
+export const ageGroupFor = (birthYear, now = new Date()) => now.getFullYear() - birthYear >= 14 ? 'teen' : 'child';
 // Player nicknames: 3 to 14 letters, digits, spaces, "_" or "-". Returns '' when unusable.
 export function cleanName(text) {
   const name = String(text ?? '').replace(/[^\p{L}\p{N} _-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 14).trim();
@@ -274,7 +282,8 @@ export function parseProfile(raw) {
   if (!data || data.version !== 1) throw new Error('Perfil incompatible');
   // A save from an earlier epoch starts over, keeping only the name and easy mode;
   // `resetNotice` lets the game explain it once.
-  if (data.epoch !== PROGRESS_EPOCH) return { ...result, name: cleanName(data.name), easy: data.easy === true, resetNotice: true };
+  const ageGroup = AGE_GROUPS.includes(data.ageGroup) ? data.ageGroup : '';
+  if (data.epoch !== PROGRESS_EPOCH) return { ...result, ageGroup, name: cleanName(data.name), easy: data.easy === true, resetNotice: true };
   const count = value => Number.isFinite(value) && value >= 0 && value <= 1e12;
   for (const key of ['bits', 'xp', 'wins', 'totalKills', 'best']) {
     if (!count(data[key])) throw new Error('Perfil inválido');
@@ -328,10 +337,10 @@ export function parseProfile(raw) {
   // Friends: players met in private rooms ({ uid, name }), at most 50. Season rewards
   // already claimed are remembered by season id.
   if (Array.isArray(data.friends)) result.friends = data.friends.filter(f => f && typeof f.uid === 'string' && f.uid.length <= 128).slice(0, 50).map(f => ({ uid: f.uid, name: cleanName(f.name) || 'Amigo' }));
-  if (typeof data.seasonClaimed === 'string' && /^d{4}-d{2}$/.test(data.seasonClaimed)) result.seasonClaimed = data.seasonClaimed;
+  if (typeof data.seasonClaimed === 'string' && /^\d{4}-\d{2}$/.test(data.seasonClaimed)) result.seasonClaimed = data.seasonClaimed;
   const st = data.streak;
   if (st && day(st.last) && Number.isInteger(st.count) && st.count > 0 && st.count <= 1e5) result.streak = { last: st.last, count: st.count };
-  return { ...result, name: cleanName(data.name), easy: data.easy === true, nemesis: typeof data.nemesis === 'string' ? data.nemesis.slice(0, 40) : '', skin: data.skin, trail: data.trail };
+  return { ...result, ageGroup, name: cleanName(data.name), easy: data.easy === true, nemesis: typeof data.nemesis === 'string' ? data.nemesis.slice(0, 40) : '', skin: data.skin, trail: data.trail };
 }
 // Every chest prize: characters (except the starter) and the special trail colors.
 export const PRIZES = [

@@ -49,7 +49,7 @@ El archivo que se sube es **`pintamundo.aab`**, de la versión fija «apk» de G
 
 **Acceso a la app:** todas las funciones están disponibles sin acceso especial (la cuenta de Google es opcional).
 
-**Anuncios:** Sí, la app contiene anuncios (anuncios con recompensa de AdMob).
+**Anuncios:** Sí, la app contiene anuncios (anuncios con recompensa de AdMob), **solo para jugadores de 13 años o más**. Para los menores de 13 (o si no indicaron su edad) AdMob ni siquiera se inicia.
 
 **Clasificación de contenido (cuestionario IARC):**
 - Categoría: Juego.
@@ -59,7 +59,14 @@ El archivo que se sube es **`pintamundo.aab`**, de la versión fija «apk» de G
 - Comparte la ubicación del usuario: No.
 - Compras digitales: No (por ahora).
 
-**Público objetivo:** 13–15, 16–17 y 18 o más. No marques menores de 13. A «¿Podría la app atraer a niños sin querer?» responde con sinceridad (por el estilo de dibujos animados, probablemente «Sí»). Google puede pedir que la ficha no se dirija a niños, y no lo hace.
+**Público objetivo y contenido:** marca **9–12, 13–15, 16–17 y 18 o más** (el juego es para 10 años o más). Al incluir menores de 13, la app queda bajo la **Política de Familias** de Google Play como público **mixto**, y el juego ya cumple lo que exige:
+
+- **Pantalla de edad neutral** al abrir el juego por primera vez («¿En qué año naciste?», sin año preseleccionado ni pistas). Solo se guarda si es menor de 13 o no, nunca el año.
+- **Menores de 13 (o edad desconocida):** sin anuncios ni AdMob (no se envía el ID de publicidad), sin inicio de sesión con Google y sin escribir nombre: en línea aparecen con el nombre de su personaje.
+- **13 años o más:** anuncios con recompensa de AdMob (SDK autocertificado para Familias), clasificación máxima de anuncios PG, y cuenta de Google opcional.
+- Sin chat: solo emotes de una lista fija.
+
+En el formulario de Familias responde que los anuncios a niños **no se muestran** y que usas una pantalla de edad neutral. En la ficha no prometas nada que sea solo para mayores (por ejemplo, el ranking con cuenta) como si fuera para todos.
 
 **Seguridad de los datos:**
 - ¿Recoge o comparte datos? **Sí.**
@@ -68,10 +75,10 @@ El archivo que se sube es **`pintamundo.aab`**, de la versión fija «apk» de G
 
 | Tipo de dato | Recogido | Compartido | Para qué | ¿Opcional? |
 | --- | --- | --- | --- | --- |
-| Información personal → Nombre (el apodo del juego) | Sí | No | Funcionalidad de la app | Sí (solo se envía en partidas en línea o con cuenta) |
+| Información personal → Nombre (el apodo del juego, solo 13+) | Sí | No | Funcionalidad de la app | Sí (solo se envía en partidas en línea o con cuenta) |
 | Información personal → ID de usuario (Firebase) | Sí | No | Funcionalidad de la app, gestión de la cuenta | Sí (solo con cuenta) |
 | Actividad en la app → Otras acciones (progreso del juego) | Sí | No | Funcionalidad de la app | Sí (solo con cuenta) |
-| Identificadores del dispositivo → ID de publicidad | Sí | Sí (Google AdMob) | Publicidad, prevención de fraude | No |
+| Identificadores del dispositivo → ID de publicidad (solo 13+) | Sí | Sí (Google AdMob) | Publicidad, prevención de fraude | No |
 | Información de la app y rendimiento → Diagnósticos | Sí | Sí (Google AdMob) | Publicidad, análisis | No |
 | Ubicación aproximada (por IP, AdMob) | Sí | Sí (Google AdMob) | Publicidad | No |
 
@@ -88,3 +95,12 @@ Google Play vuelve a firmar la app con su propia clave (Firma de apps de Play). 
 3. Descarga de nuevo `google-services.json`, cámbialo en `android/app/` y sube el cambio.
 
 La clave de subida es la de `firma-android/pintamundo.keystore` (SHA-1 `54:DF:4C:CE:10:D2:38:D2:22:1B:A1:D4:07:92:73:2E:1F:E6:CA:92`). Guárdala bien: sin ella no se pueden subir actualizaciones.
+
+## Primera publicación con una cuenta personal
+
+Las cuentas personales nuevas deben hacer una **prueba cerrada con al menos 12 testers durante 14 días seguidos** antes de poder solicitar el acceso a producción:
+
+1. **Prueba y lanzamiento → Pruebas → Prueba cerrada → Crear canal**, sube `pintamundo.aab` y añade una lista de correos de testers (cuentas de Google).
+2. Comparte con ellos el enlace de participación: deben aceptarlo e instalar la app desde Google Play, y conviene que la abran varios días.
+3. Pasados 14 días con 12 o más testers activos, en el **Panel** aparece **Solicitar acceso a producción**. Google pregunta cómo fue la prueba; responde con detalle.
+4. Cada actualización durante la prueba: sube el nuevo `pintamundo.aab` al mismo canal (el código de versión sube solo en GitHub Actions).

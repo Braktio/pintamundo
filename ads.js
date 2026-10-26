@@ -10,6 +10,10 @@ export const REWARDED_ID = 'ca-app-pub-8874186940779998/2770981951';
 const TESTING = REWARDED_ID.startsWith('ca-app-pub-3940256099942544/');
 
 let started = null, loading = null, ready = false;
+// Ads are off until the age screen says the player is 13 or older (Google Play Families policy:
+// children and users of unknown age see no ads here, and AdMob does not even start for them).
+let allowed = false;
+export function allowAds(value) { allowed = value === true; if (!allowed) ready = false; }
 // Consent first (Google shows its form only where the law asks for it), then the SDK.
 // Ads are limited to content suitable for all ages.
 function start() {
@@ -22,17 +26,17 @@ function start() {
 }
 // Loads the next ad in the background so it is ready when an offer is shown.
 export function preloadAd() {
-  if (!nativeApp || !AdMob || ready || loading) return;
+  if (!allowed || !nativeApp || !AdMob || ready || loading) return;
   loading = start()
     .then(() => AdMob.prepareRewardVideoAd({ adId: REWARDED_ID, isTesting: TESTING, immersiveMode: true }))
     .then(() => { ready = true; }, () => { ready = false; })
     .finally(() => { loading = null; });
 }
-export const adReady = () => ready;
+export const adReady = () => allowed && ready;
 // Shows the loaded ad. Resolves true if the player earned the reward, false if they closed
 // it early or it could not be shown. Another ad starts loading afterwards.
 export function watchAd() {
-  if (!ready) return Promise.resolve(false);
+  if (!allowed || !ready) return Promise.resolve(false);
   ready = false;
   return new Promise(resolve => {
     let done = false, rewarded = false;
