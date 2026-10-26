@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "649367771142-n5g02ao2jpq8dm8abgahb7jd7nn9oktl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.braktio.pintamundo",
+            "certificate_hash": "5fb2046cb899535bcf44a082d28e5851106d12f7"
+          }
+        },
+        {
           "client_id": "649367771142-tb3edpumhgikp7p9inr30heqlbpo1i74.apps.googleusercontent.com",
           "client_type": 3
         }
