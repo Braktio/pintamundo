@@ -8,15 +8,15 @@ import { Hub } from './multiplayer.mjs';
 import { createRanked } from './ranked.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
-const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon' };
+const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon', '.mp3': 'audio/mpeg' };
 // Only the files the browser needs are public; tests, scripts and the server stay private.
-const PUBLIC = new Set(['/index.html', '/styles.css', '/game.js', '/engine.js', '/renderer.js', '/online.js', '/cloud.js', '/music.js', '/ads.js', '/privacy.html', '/manifest.webmanifest', '/favicon.ico']);
+const PUBLIC = new Set(['/index.html', '/styles.css', '/game.js', '/engine.js', '/renderer.js', '/online.js', '/cloud.js', '/music.js', '/soundtrack.js', '/ads.js', '/privacy.html', '/manifest.webmanifest', '/favicon.ico']);
 const server = createServer(async (request, response) => {
   try {
     const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
     if (path === '/health') { response.writeHead(200, { 'Content-Type': 'text/plain' }); response.end('ok'); return; }
     const file = path === '/' ? '/index.html' : path;
-    if (!PUBLIC.has(file) && !/^\/fonts\/[a-z0-9-]+\.woff2$/.test(file) && !/^\/(icons|ui)\/[a-z0-9-]+\.png$/.test(file)) throw new Error('not public');
+    if (!PUBLIC.has(file) && !/^\/fonts\/[a-z0-9-]+\.woff2$/.test(file) && !/^\/(icons|ui)\/[a-z0-9-]+\.png$/.test(file) && !/^\/audio\/[a-z0-9-]+\.mp3$/.test(file)) throw new Error('not public');
     const target = resolve(root, '.' + file), data = await readFile(target);
     response.writeHead(200, { 'Content-Type': types[extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
     response.end(data);

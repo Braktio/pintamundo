@@ -11,3 +11,5 @@ android/local.properties
 *.keystore
 firma-android/
 play-store/*.mp4
+# Suno originals: the game uses the trimmed, compressed copies (audio/menu.mp3, audio/partida.mp3).
+audio/Pintamundo*

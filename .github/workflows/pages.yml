@@ -28,7 +28,7 @@ jobs:
       - name: Pruebas
         run: node --test tests/*.test.js
       - name: Preparar solo los archivos del juego
-        run: mkdir _site && cp -r index.html styles.css game.js engine.js renderer.js online.js cloud.js music.js ads.js privacy.html manifest.webmanifest favicon.ico fonts icons ui _site/
+        run: mkdir _site && cp -r index.html styles.css game.js engine.js renderer.js online.js cloud.js music.js soundtrack.js ads.js privacy.html manifest.webmanifest favicon.ico fonts icons ui audio _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -2,7 +2,7 @@ import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER,
 import { Renderer, shade } from './renderer.js';
 import { Connection, Mirror, defaultServer } from './online.js';
 import * as cloud from './cloud.js';
-import { music } from './music.js';
+import { music } from './soundtrack.js';
 import { adReady, watchAd, preloadAd, allowAds } from './ads.js';
 
 const $ = id => document.getElementById(id);
@@ -108,7 +108,7 @@ function tone(kind = 'capture') {
     }
   } catch { sound = false; }
 }
-// The sound button turns on both the effects and the background music (music.js). The
+// The sound button turns on both the effects and the background music (soundtrack.js). The
 // choice is remembered; browsers only allow audio after a tap, so a remembered "on"
 // starts the music with the first touch.
 const SOUND_KEY = 'pintamundo.sound';
@@ -1310,6 +1310,8 @@ function frame(time) {
   if (!document.hidden && state !== 'menu') renderer.draw(arena, time / 1000, dt);
   else if (!document.hidden && screen === 'home') renderer.portrait($('mascot'), { skin: profile.skin, color: playerColor() }, time / 1000, { idle: true });
   if (time > announcedUntil) $('announcement').hidden = true;
+  // The match song plays from the countdown to the results; the menu song everywhere else.
+  music.track(state === 'playing' || state === 'paused' || state === 'ending' ? 'partida' : 'menu');
   if (emotes.length) placeEmotes(time);
   requestAnimationFrame(frame);
 }
