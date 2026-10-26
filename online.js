@@ -1,14 +1,14 @@
 // Client side of online matches: talks to the server and mirrors its authoritative
 // arena. The local player is always remapped to actor 0, so the renderer and the
 // HUD work exactly as in solo games. Other players are smoothed between snapshots.
-import { characterFor, WIDTH, HEIGHT, clamp, DASH_SPEED } from './engine.js';
+import { characterFor, WIDTH, HEIGHT, clamp, DASH_SPEED, PLAYER_SPEED } from './engine.js';
 
 const FLAG_POWERS = ['dash', 'shield', 'ghost', 'paint', 'magnet'];
 const FROZEN = 32, WALL = 64, HUMAN = 128;
 // Others are drawn slightly in the past so there are always two snapshots to blend between.
 const DELAY = .1;
 // Same movement rules as the engine, used to predict the local player.
-const TURN_RATE = 6, PLAYER_SPEED = 4.8;
+const TURN_RATE = 6;
 // Public game server on the internet: the web game, the Android app and everyone else play there.
 export const PUBLIC_SERVER = 'wss://pintamundo.onrender.com/ws';
 // Inside the APK the page is served by Capacitor itself, not by our game server.

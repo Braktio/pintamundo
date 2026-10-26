@@ -210,8 +210,13 @@ try {
   assert.equal(await evaluate('JSON.parse(localStorage.getItem("neon-frontier.profile.v1")).ageGroup'), 'child', 'only the age group is stored');
   assert.equal(await evaluate('document.body.classList.contains("child-mode")'), true);
   assert.equal(await evaluate('Boolean(document.getElementById("name-input"))'), false, 'children are not asked to type a nickname');
+  assert.equal(await evaluate('document.querySelectorAll("[data-safe-name]").length'), 6, 'children choose from safe names');
+  await screenshot('preview-safe-names.png');
+  const safeName = await evaluate('const b=document.querySelector("[data-safe-name]");b.click();b.dataset.safeName');
+  await sleep(200);
+  assert.equal(await evaluate('JSON.parse(localStorage.getItem("neon-frontier.profile.v1")).name'), safeName);
+  assert.equal(await evaluate('document.getElementById("profile-name").textContent'), safeName, 'the chosen safe name is shown');
   assert.equal(await evaluate('getComputedStyle(document.getElementById("account-button")).display'), 'none', 'children cannot connect a Google account');
-  assert.equal(await evaluate('document.getElementById("profile-name").textContent'), 'Gato Rayo', 'a child is shown with the character name');
   assert.deepEqual(errors, [], 'desktop and mobile have no runtime errors');
   console.log('Browser OK: HUD, whole-screen touch steering + power with a second finger, minimap on phones, 44px touch targets, capture/rewards/crates, ranks and always-landscape layout.');
   await send('Browser.close');

@@ -1,4 +1,4 @@
-import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, tierStart, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonReward, CHARACTER_MAX_LEVEL, CHEST_BAR, PROGRESS_EPOCH, fillChestBar, levelChest, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, isChild, ageGroupFor, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
+import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, tierStart, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonReward, CHARACTER_MAX_LEVEL, CHEST_BAR, PROGRESS_EPOCH, fillChestBar, levelChest, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, isChild, ageGroupFor, isSafeName, suggestNames, MATCH_SECONDS, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
 import { Renderer, shade } from './renderer.js';
 import { Connection, Mirror, defaultServer } from './online.js';
 import * as cloud from './cloud.js';
@@ -492,7 +492,7 @@ setInterval(() => { if (state === 'menu') renderFreeChest(); }, 30000);
 
 function start() {
   disconnect();
-  generation++; arena = new Arena(profile); mirror = null; state = 'playing'; accumulator = 0; aim = null; keys.clear(); resetSteer();
+  generation++; arena = new Arena(profile, Math.random, { timeLimit: MATCH_SECONDS }); mirror = null; state = 'playing'; accumulator = 0; aim = null; keys.clear(); resetSteer();
   enterMatch(); announce('¡A PINTAR! 🎨'); renderHUD();
 }
 // Shared by solo and online matches: reset effects and build the HUD for the current arena.
@@ -508,7 +508,7 @@ function enterMatch() {
   $('pilot-avatar').src = renderer.portraitURL(arena.actors[0]);
   $('pilot-name').textContent = profile.name || 'Tú';
   $('leaders').innerHTML = arena.actors.map(actor => `<li data-actor="${actor.id}" class="${actor.id ? '' : 'me'}" style="--actor:${actor.color}"><img src="${renderer.portraitURL(actor)}" alt="${actor.name}"><i></i><b>0%</b></li>`).join('');
-  $('timer-pill').hidden = !mirror?.timeLimit;
+  $('timer-pill').hidden = !(mirror?.timeLimit || arena.timeLimit);
   $('emote').hidden = !mirror; $('emote-bar').hidden = true;
   // Matches go on to 100% (half is already a victory).
   goal = 100;
@@ -769,7 +769,13 @@ function renderHUD() {
   }
   $('no-powers').hidden = player.powers.length > 0;
   if (arena.follow !== undefined && !arena.actors[arena.follow]?.alive) spectate(-1);
-  if (mirror?.timeLimit) { const left = Math.ceil(mirror.remaining()); $('hud-timer').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; }
+  // Match clock (solo and online); it turns red in the last 30 seconds.
+  const limit = mirror?.timeLimit || arena.timeLimit;
+  if (limit) {
+    const left = Math.max(0, Math.ceil(mirror ? mirror.remaining() : limit - arena.time));
+    $('hud-timer').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    $('timer-pill').classList.toggle('hurry', left <= 30);
+  }
   const c = $('minimap').getContext('2d');
   c.clearRect(0, 0, 168, 144); c.fillStyle = '#ecfbf6'; c.fillRect(0, 0, 168, 144);
   for (let i = 0; i < SIZE; i++) if (arena.grid[i] >= 0) { c.fillStyle = arena.actors[arena.grid[i]].color + 'aa'; c.fillRect(i % WIDTH * 2, Math.floor(i / WIDTH) * 2, 2, 2); }
@@ -974,7 +980,7 @@ let matchStats = { orbs: 0, powers: 0 };
 // The nickname is what other players see online. Cleaned names only contain letters,
 // digits, spaces, "_" and "-", so they are safe to place in HTML.
 function editName(first = false, suggestion = '') {
-  if (isChild(profile)) { if (!first) toast(`En línea te verán como ${characterFor(profile.skin).name}. 🐥`); followInvite(); return; }
+  if (isChild(profile)) { pickSafeName(first); return; }
   const offerCloud = first && cloud.available && !account;
   dialog(`<p class="eyebrow">${first ? '👋 ¡Bienvenido a Pintamundo!' : '👤 Tu perfil'}</p><h2>${first ? 'Crea tu perfil' : 'Cambia tu nombre'}</h2><p>Así te verán los demás en las partidas en línea.</p><div class="name-row"><input id="name-input" maxlength="14" value="${profile.name || suggestion}" placeholder="Tu nombre" autocomplete="nickname" spellcheck="false" aria-label="Tu nombre"><small>De 3 a 14 letras o números.</small></div><div class="dialog-buttons"><button id="name-save" class="dialog-button">✓ ${first ? '¡LISTO!' : 'Guardar'}</button>${first ? '' : '<button id="name-cancel" class="dialog-button secondary">Cancelar</button>'}</div>${offerCloud ? '<p class="cloud-hint">¿Ya jugabas en otro teléfono?</p><div class="dialog-buttons"><button id="name-cloud" class="dialog-button secondary">☁️ Recuperar mi progreso</button></div>' : ''}`);
   const input = $('name-input');
@@ -989,8 +995,21 @@ function editName(first = false, suggestion = '') {
   if ($('name-cloud')) $('name-cloud').onclick = openAccount;
 }
 $('profile-button').onclick = () => editName();
+// Name picker for children: a few safe names to choose from, with more on request.
+function pickSafeName(first = false) {
+  const options = suggestNames(6);
+  dialog(`<p class="eyebrow">${first ? '👋 ¡Bienvenido a Pintamundo!' : '👤 Tu perfil'}</p><h2>Elige tu nombre</h2><p>Así te verán los demás en las partidas en línea.</p><div class="name-choices">${options.map(name => `<button class="dialog-button secondary" data-safe-name="${name}">${name}</button>`).join('')}</div><div class="dialog-buttons"><button id="name-more" class="dialog-button">🎲 Ver otros</button><button id="name-skip" class="dialog-button secondary">${first ? 'Usar el de mi personaje' : 'Cancelar'}</button></div>`);
+  for (const button of document.querySelectorAll('[data-safe-name]')) button.onclick = () => {
+    profile.name = button.dataset.safeName; save(true); renderMenu(); $('dialog').close(); followInvite();
+    toast(`¡Hola, ${profile.name}! 🎨`);
+  };
+  $('name-more').onclick = () => pickSafeName(first);
+  $('name-skip').onclick = () => { $('dialog').close(); followInvite(); };
+}
+// Online name: children only ever send a name from the safe list.
+const onlineName = () => isChild(profile) ? (isSafeName(profile.name) ? profile.name : '') : profile.name;
 function renderAccount() {
-  $('profile-name').textContent = isChild(profile) ? characterFor(profile.skin).name : profile.name || 'Elige tu nombre';
+  $('profile-name').textContent = isChild(profile) ? (isSafeName(profile.name) ? profile.name : 'Elige tu nombre') : profile.name || 'Elige tu nombre';
   $('account-button').hidden = !cloud.available || isChild(profile);
   $('account-button').textContent = account ? '☁️ Cuenta de Google' : '☁️ Guardar en mi cuenta';
 }
@@ -1056,9 +1075,11 @@ async function pushCloud() {
 }
 // Replaces the local profile with the cloud copy (only from the menu, never mid-match).
 function adopt(remote) {
+  // Copies saved before the age screen have no age group: keep the one answered on this phone.
+  if (!remote.ageGroup) remote.ageGroup = profile.ageGroup;
   profile = remote; savedContent = contentOf(profile);
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(profile)); } catch { /* The cloud still has it. */ }
-  arena = new Arena(profile); renderMenu();
+  arena = new Arena(profile); applyAge();
 }
 const hasProgress = p => p.xp > 0 || p.wins > 0 || p.skins.length > 0;
 const summary = p => `${p.name || 'Sin nombre'} · Nivel ${levelFor(p.xp)} · ${number(p.bits)} ⭐`;
@@ -1207,7 +1228,7 @@ async function joinOnline(kind, code = '') {
   const character = characterFor(profile.skin);
   const skin = ownsCharacter(profile, character.id) ? character.id : 'interceptor';
   const token = account ? await cloud.idToken().catch(() => '') : '';
-  online.connection.send({ t: kind, v: PROGRESS_EPOCH, code, token, name: isChild(profile) ? '' : profile.name, level: characterLevel(profile, skin), skin, color: playerColor(), easy: profile.easy === true });
+  online.connection.send({ t: kind, v: PROGRESS_EPOCH, code, token, name: onlineName(), level: characterLevel(profile, skin), skin, color: playerColor(), easy: profile.easy === true });
 }
 function disconnect() {
   if (!online) return;
@@ -1332,7 +1353,7 @@ function applyAge() {
   if (!child) setTimeout(preloadAd, 3000);
 }
 applyAge();
-const welcome = () => { if (showResetNotice()) return; if (!isChild(profile) && !profile.name && state === 'menu' && !$('dialog').open) editName(true); else followInvite(); };
+const welcome = () => { if (showResetNotice()) return; if (!profile.name && state === 'menu' && !$('dialog').open) editName(true); else followInvite(); };
 Promise.race([restoreAccount(), new Promise(resolve => setTimeout(resolve, 2000))]).finally(() => {
   if (isChild(profile) && account) applyAge();
   if (!profile.ageGroup && state === 'menu') askAge(welcome); else welcome();

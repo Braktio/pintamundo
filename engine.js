@@ -268,6 +268,18 @@ export const isChild = profile => profile.ageGroup !== 'teen';
 // Only the birth year is asked, so someone born 13 years ago may still be 12: when in doubt,
 // the player counts as a child (the safer side for the Families policy).
 export const ageGroupFor = (birthYear, now = new Date()) => now.getFullYear() - birthYear >= 14 ? 'teen' : 'child';
+// Safe names for children: they pick one of these (animal + adjective) instead of typing,
+// so nothing personal or inappropriate can be written (Google Play Families policy).
+const NAME_ANIMALS = ['Gato', 'Pato', 'Rana', 'Oso', 'Zorro', 'Panda', 'Búho', 'León', 'Tigre', 'Koala', 'Mono', 'Foca', 'Puma', 'Lobo', 'Pez', 'Cebra', 'Llama', 'Erizo', 'Delfín', 'Ardilla'];
+const NAME_WORDS = ['Veloz', 'Feliz', 'Valiente', 'Audaz', 'Genial', 'Azul', 'Verde', 'Gigante', 'Ágil', 'Estelar', 'Turbo', 'Brillante', 'Alegre', 'Rayo', 'Cósmico'];
+export const SAFE_NAMES = NAME_ANIMALS.flatMap(animal => NAME_WORDS.map(word => `${animal} ${word}`)).filter(name => name.length <= 14);
+const SAFE_SET = new Set(SAFE_NAMES);
+export const isSafeName = name => SAFE_SET.has(name);
+export function suggestNames(count = 6, random = Math.random) {
+  const pool = [...SAFE_NAMES], picked = [];
+  while (picked.length < count && pool.length) picked.push(pool.splice(Math.floor(random() * pool.length), 1)[0]);
+  return picked;
+}
 // Player nicknames: 3 to 14 letters, digits, spaces, "_" or "-". Returns '' when unusable.
 export function cleanName(text) {
   const name = String(text ?? '').replace(/[^\p{L}\p{N} _-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 14).trim();
@@ -392,6 +404,10 @@ export function openChest(profile, type, random = Math.random) {
 }
 // Bots pick distinct characters; rarer ones show up less often.
 const BOT_WEIGHTS = { comun: 40, raro: 30, epico: 18, legendario: 9, mitico: 3 };
+// Match pacing: matches last 3 minutes (the biggest zone wins) unless someone paints the
+// whole map first; characters move 15% faster than in the first versions.
+export const MATCH_SECONDS = 180;
+export const PLAYER_SPEED = 5.5, BOT_SPEED = 4.8, EASY_BOT_SPEED = 3.9;
 export const SPAWNS = [[42, 36], [26, 24], [59, 24], [25, 51], [59, 51], [42, 14], [43, 60]];
 export const MAX_PLAYERS = SPAWNS.length;
 export class Arena {
@@ -594,7 +610,7 @@ export class Arena {
     this.clearTrail(victim);
     const land = [];
     for (let i = 0; i < SIZE; i++) if (this.grid[i] === victim.id) land.push(i);
-    const stolen = killer?.alive ? Math.floor(land.length * .25) : 0;
+    const stolen = killer?.alive ? land.length : 0;
     if (killer) land.sort((a, b) => {
       const pa = coords(a), pb = coords(b);
       return Math.hypot(pa.x - killer.x, pa.y - killer.y) - Math.hypot(pb.x - killer.x, pb.y - killer.y);
@@ -615,9 +631,9 @@ export class Arena {
     } else if (!this.respawnAt && !this.actors.some(a => !a.human && a.alive)) this.respawnAt = this.time + RESPAWN_DELAY;
     this.checkWin();
   }
-  // More than half the map is a victory (each player's own), but the match goes on. It only
-  // ends when the whole map is painted or, solo, when the player is caught and, online, when
-  // every player has been caught or has left. There is no time limit unless one is given.
+  // More than half the map is a victory (each player's own), but the match goes on. It ends
+  // when the time limit runs out, when the whole map is painted or, solo, when the player is
+  // caught and, online, when every player has been caught or has left.
   checkWin() {
     for (const actor of this.actors) if (actor.human) {
       actor.best = Math.max(actor.best, actor.count);
@@ -663,7 +679,7 @@ export class Arena {
     return Math.min(actor.x, actor.y, WIDTH - actor.x, HEIGHT - actor.y);
   }
   speed(actor) {
-    return (actor.id ? this.easy ? 3.4 : 4.2 : 4.8) * (this.active(actor, 'dash') ? DASH_SPEED : 1) * (actor.wallSurge ? 1.35 : 1);
+    return (actor.human ? PLAYER_SPEED : this.easy ? EASY_BOT_SPEED : BOT_SPEED) * (this.active(actor, 'dash') ? DASH_SPEED : 1) * (actor.wallSurge ? 1.35 : 1);
   }
   spawnOrb() { this.orbRevision++; this.orbs.push({ x: 3 + this.random() * (WIDTH - 6), y: 3 + this.random() * (HEIGHT - 6), phase: this.random() * 6.28 }); }
   ai(actor) {

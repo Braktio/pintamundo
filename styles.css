@@ -648,3 +648,10 @@ body.in-match { touch-action:none; overscroll-behavior:none }
 /* Children never see Google sign-in buttons; their progress stays on the phone. */
 body.child-mode .login,body.child-mode .login-buttons .login,body.child-mode #account-button { display:none!important }
 .dialog-button:disabled { filter:grayscale(1); opacity:.55; box-shadow:0 2px 0 var(--ink) }
+/* Last 30 seconds of a match: the clock turns red and pulses. */
+#timer-pill.hurry { background:linear-gradient(#ff8aa0,var(--red)); animation:pulse-clock .8s ease-in-out infinite alternate }
+#timer-pill.hurry b { color:#fff }
+@keyframes pulse-clock { to { transform:scale(1.08) } }
+/* Safe-name picker for children: big buttons, two per row. */
+.name-choices { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0 4px }
+.name-choices .dialog-button { min-height:54px; font-size:19px }

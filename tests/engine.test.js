@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays, START_CHARGE, PROGRESS_EPOCH, fillChestBar, levelChest, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonStart, seasonReward, FIRST_SEASON, FREE_CHEST_HOURS, isChild, ageGroupFor } from '../engine.js';
+import { Arena, WIDTH, SIZE, COLORS, cell, coords, crossedCells, freshProfile, parseProfile, cleanName, levelFor, levelXP, CHARACTERS, POWERS, CHESTS, RARITIES, PRIZES, rollRarity, openChest, RANKS, TIERS, tierStart, rankFor, rankChange, CHARACTER_MAX_LEVEL, characterLevel, copiesFor, levelsUp, powerScale, missionsFor, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, addDays, START_CHARGE, PROGRESS_EPOCH, fillChestBar, levelChest, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonStart, seasonReward, FIRST_SEASON, FREE_CHEST_HOURS, isChild, ageGroupFor, PLAYER_SPEED, BOT_SPEED, MATCH_SECONDS, SAFE_NAMES, isSafeName, suggestNames, cleanName as clean_ } from '../engine.js';
 import { Renderer } from '../renderer.js';
 
 function clean(arena = new Arena()) {
@@ -66,14 +66,14 @@ test('crossing or touching your own trail is always harmless', () => {
   assert.equal(actor.alive, true); assert.equal(arena.ended, false);
   assert.equal(arena.trails[cell(10, 10)], 0);
 });
-test('cutting a rival transfers exactly 25 percent of land and rewards a kill', () => {
+test('cutting a rival hands over its whole zone and rewards a kill', () => {
   const arena = clean(), victim = arena.actors[1], attacker = arena.actors[0];
   for (let i = 0; i < 100; i++) arena.assign(i, 1);
   trail(arena, victim, [[12, 12], [13, 12]]);
   attacker.lastCell = cell(14, 12);
   arena.cutAtTip(attacker, { x: 14.5, y: 12.5 }, { x: 13.5, y: 12.5 });
   assert.equal(victim.alive, false); assert.equal(victim.count, 0);
-  assert.equal(attacker.count, 25); assert.equal(attacker.kills, 1);
+  assert.equal(attacker.count, 100, 'the whole zone, so the map fills faster'); assert.equal(attacker.kills, 1);
   assert.equal(victim.trail.length, 0);
   assert.ok(arena.events.some(e => e.type === 'reward' && e.kills === 1));
   ownershipInvariant(arena);
@@ -118,7 +118,7 @@ test('Wall Surge grants exactly 35 percent speed and switches off away from the 
   const start = actor.y;
   arena.step(1 / 60);
   assert.ok(actor.wallSurge); assert.ok(actor.alive);
-  assert.ok(Math.abs((actor.y - start) / (4.8 / 60) - 1.35) < 1e-9);
+  assert.ok(Math.abs((actor.y - start) / (PLAYER_SPEED / 60) - 1.35) < 1e-9);
   assert.ok(arena.events.some(e => e.type === 'wall'));
   actor.x = 20.5; actor.y = 20.5; actor.lastCell = cell(20, 20);
   arena.step(1 / 60); assert.equal(actor.wallSurge, false);
@@ -552,4 +552,21 @@ test('the age group and the claimed season survive a save, and bad values are dr
   assert.equal(loaded.ageGroup, 'teen');
   assert.equal(loaded.seasonClaimed, '2026-09', 'season rewards are not claimed twice after reloading');
   assert.equal(parseProfile(JSON.stringify({ ...profile, ageGroup: 'adult' })).ageGroup, '');
+});
+
+test('match pacing: 3-minute matches, every person at the same speed, faster than robots', () => {
+  assert.equal(MATCH_SECONDS, 180);
+  const arena = new Arena(freshProfile(), Math.random, { humans: [{ skin: 'tron', name: 'A' }, { skin: 'tron', name: 'B' }], timeLimit: MATCH_SECONDS });
+  assert.equal(arena.speed(arena.actors[0]), PLAYER_SPEED);
+  assert.equal(arena.speed(arena.actors[1]), PLAYER_SPEED, 'the second person is not slowed down like a robot');
+  assert.equal(arena.speed(arena.actors[2]), BOT_SPEED);
+  arena.time = MATCH_SECONDS - 1 / 90; arena.events = []; arena.step(1 / 90);
+  assert.ok(arena.events.some(e => e.type === 'end' && e.reason === '¡Se acabó el tiempo!'), 'the match ends when the clock runs out');
+});
+test('children pick from a safe name list that passes the nickname filter', () => {
+  assert.ok(SAFE_NAMES.length > 100);
+  assert.ok(SAFE_NAMES.every(name => clean_(name) === name && name.length <= 14));
+  const six = suggestNames(6);
+  assert.equal(new Set(six).size, 6); assert.ok(six.every(isSafeName));
+  assert.equal(isSafeName('Juan Pérez'), false, 'typed names are not on the list');
 });
