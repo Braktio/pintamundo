@@ -6,7 +6,7 @@ Material para la ficha de Play Console. Las imágenes se regeneran con `node scr
 | --- | --- | --- |
 | `icon-512.png` | Icono de la aplicación | 512 × 512 |
 | `feature-graphic.png` | Gráfico de funciones | 1024 × 500 |
-| `01-inicio.png` … `06-misiones.png` | Capturas de pantalla del teléfono (horizontal) | 1920 × 1080 |
+| `01-inicio.png` … `08-niveles.png` | Capturas de pantalla del teléfono (horizontal, con título), las 8 que admite Play | 1920 × 1080 |
 
 El archivo que se sube es **`pintamundo.aab`**, de la versión fija «apk» de GitHub Releases. Lo genera GitHub Actions en cada cambio.
 

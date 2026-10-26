@@ -997,7 +997,8 @@ export class Renderer {
   portrait(canvas, actor, time = 0, { size = canvas.clientWidth, idle = false } = {}) {
     if (!size) return;
     const saved = { ctx: this.ctx, width: this.width, height: this.height }, dpr = Math.min(devicePixelRatio || 1, 2);
-    if (canvas.width !== Math.round(size * dpr)) canvas.width = canvas.height = Math.round(size * dpr);
+    // Both sides are checked: a new canvas is 300×150, so a 300 px portrait would keep 150 px of height.
+    if (canvas.width !== Math.round(size * dpr) || canvas.height !== Math.round(size * dpr)) canvas.width = canvas.height = Math.round(size * dpr);
     this.ctx = canvas.getContext('2d'); this.width = this.height = size;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); this.ctx.clearRect(0, 0, size, size);
     this.character({ id: 0, angle: Math.PI / 2, trail: [], ...actor }, null, time, { at: { x: size / 2, y: size * .56 }, size: size * .3 / (this.scale * .78), still: !idle, idle });
