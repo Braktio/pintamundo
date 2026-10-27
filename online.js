@@ -6,7 +6,9 @@ import { characterFor, WIDTH, HEIGHT, clamp, DASH_SPEED, PLAYER_SPEED } from './
 const FLAG_POWERS = ['dash', 'shield', 'ghost', 'paint', 'magnet'];
 const FROZEN = 32, WALL = 64, HUMAN = 128;
 // Others are drawn slightly in the past so there are always two snapshots to blend between.
-const DELAY = .1;
+// The free server sometimes stalls for 100-300 ms and then sends a burst, so the delay grows
+// to cover the lateness actually seen and slowly shrinks back when the connection is steady.
+const MIN_DELAY = .1, MAX_DELAY = .4;
 // Same movement rules as the engine, used to predict the local player.
 const TURN_RATE = 6;
 // Public game server on the internet: the web game, the Android app and everyone else play there.
@@ -69,7 +71,7 @@ export class Mirror {
     for (let i = 0, cell = 0; i < start.grid.length; i += 2) { const owner = start.grid[i] < 0 ? -1 : map(start.grid[i]); arena.grid.fill(owner, cell, cell + start.grid[i + 1]); cell += start.grid[i + 1]; }
     this.orbs(start.orbs);
     arena.revision++;
-    this.snapshots = [];
+    this.snapshots = []; this.offset = null; this.delay = MIN_DELAY;
   }
   orbs(flat) {
     const previous = this.arena.orbs || [];
@@ -104,8 +106,13 @@ export class Mirror {
     const me = arena.actors[0];
     me.best = Math.max(me.best, me.count);
     for (const [power, remaining] of Object.entries(message.me || {})) me.ready[power] = arena.time + remaining;
-    this.snapshots.push({ time: message.time, at: performance.now(), positions });
-    if (this.snapshots.length > 8) this.snapshots.shift();
+    const at = performance.now(), sample = message.time - at / 1000;
+    // offset: server time minus local time for the fastest snapshots (drifts down slowly so a
+    // route change is picked up); lateness is how far behind that a snapshot arrived.
+    this.offset = this.offset === null ? sample : Math.max(sample, this.offset - .0005);
+    this.delay = Math.min(MAX_DELAY, Math.max(MIN_DELAY, this.delay - .001, this.offset - sample + .05));
+    this.snapshots.push({ time: message.time, at, positions });
+    if (this.snapshots.length > 20) this.snapshots.shift();
     for (const event of message.e) arena.events.push(this.mapEvent(event));
   }
   remaining() { return Math.max(0, this.timeLimit - this.arena.time); }
@@ -129,11 +136,12 @@ export class Mirror {
     me.angle = angle; me.predicted = true;
     return true;
   }
-  // Blend the two snapshots around "now − DELAY" so others move smoothly; the local player is predicted.
+  // Blend the two snapshots around "now − delay" on a steady server clock (not the arrival of
+  // the last snapshot, which jumps with each burst) so others move smoothly; the local player is predicted.
   update(now, desired, rtt = 0) {
     const list = this.snapshots; if (!list.length) return;
-    const latest = list.at(-1), target = latest.time + (now - latest.at) / 1000 - DELAY;
-    let a = list[0], b = latest;
+    const target = now / 1000 + this.offset - this.delay;
+    let a = list[0], b = list.at(-1);
     for (let i = 0; i < list.length - 1; i++) if (list[i].time <= target && list[i + 1].time >= target) { a = list[i]; b = list[i + 1]; break; }
     const span = b.time - a.time, k = span > 0 ? Math.min(1, Math.max(0, (target - a.time) / span)) : 1;
     const predicted = this.predict(now, desired, rtt);

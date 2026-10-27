@@ -14,7 +14,7 @@ const PUBLIC = new Set(['/index.html', '/styles.css', '/game.js', '/engine.js', 
 const server = createServer(async (request, response) => {
   try {
     const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
-    if (path === '/health') { response.writeHead(200, { 'Content-Type': 'text/plain' }); response.end('ok'); return; }
+    if (path === '/health') { response.writeHead(200, { 'Content-Type': 'text/plain' }); response.end(ranked ? 'ok, ranking activo' : 'ok, sin ranking'); return; }
     const file = path === '/' ? '/index.html' : path;
     if (!PUBLIC.has(file) && !/^\/fonts\/[a-z0-9-]+\.woff2$/.test(file) && !/^\/(icons|ui)\/[a-z0-9-]+\.png$/.test(file) && !/^\/audio\/[a-z0-9-]+\.mp3$/.test(file)) throw new Error('not public');
     const target = resolve(root, '.' + file), data = await readFile(target);

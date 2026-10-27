@@ -589,6 +589,8 @@ function end(won, reason, ranking = null) {
     };
     const opener = `<div class="dialog-buttons"><button class="dialog-button" id="open-earned">🎁 ¡ABRIR ${earned.length > 1 ? earned.length + ' COFRES' : 'COFRE'}!</button></div>`;
     dialog(`<p class="eyebrow">${perfect ? '¡Pintaste todo el mapa!' : won ? '¡Pintaste más de la mitad!' : 'Fin de la partida'}</p><div class="result-stars" aria-label="${stars} de 3 estrellas">${[0, 1, 2].map(i => `<span class="${i < stars ? '' : 'off'}">⭐</span>`).join('')}</div><h2>${title}</h2><p>${perfect ? '¡Todo el mapa es de tu color!' : won ? '¡Más de la mitad del mapa es de tu color! ' + reason : reason}</p><div class="results"><div><strong>${Math.round(percent)}%</strong><small>🎨 Pintado</small></div><div><strong>${player.kills}</strong><small>🎯 Atrapados</small></div><div><strong>+${number(arena.bits)}</strong><small>⭐ Estrellas</small></div></div><p>+${number(arena.xp)} XP · Nivel ${levelFor(profile.xp)}</p>${ranked ? '<div id="match-trophies" class="rank-result">🏆 Calculando copas…</div>' : `<p class="rank-hint">🏆 Las copas del ranking se ganan en partidas en línea${account ? '' : ' con tu cuenta de Google'}.</p>`}${chests}${earned.length ? opener : actions}`);
+    // The server may never answer (ranking off or account not verified): don't spin forever.
+    if (ranked) setTimeout(() => { const box = $('match-trophies'); if (box) box.textContent = '🏆 Esta vez no se pudieron sumar las copas.'; }, 12000);
     tone(won ? 'level' : stars ? 'capture' : 'death');
     if (ranking) $('dialog-content').querySelector('h2').insertAdjacentHTML('afterend', `<p class="ranking-place">🏅 Quedaste en el puesto ${ranking.indexOf(0) + 1} de ${ranking.length}</p>`);
     if (!earned.length) { wire(); return; }
