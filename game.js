@@ -853,12 +853,17 @@ async function claimSeasonReward() {
 // Where a player without an account would stand in the loaded ranking (0 if unknown).
 const season = seasonOf();
 const wouldPlace = () => leaderboard.status === 'ok' ? leaderboard.rows.filter(row => (Number(row.points) || 0) > profile.points).length + 1 : 0;
-// Players who open Rangos without an account are invited, once per visit to the game, to
-// connect it so their trophies count in the world ranking.
+// Players who open Rangos without an account are invited to connect it so their trophies
+// count in the world ranking: at most once a week, since the tab already has its own button.
+const RANK_SUGGEST_KEY = 'pintamundo.rankSuggested', WEEK = 7 * 24 * 3600 * 1000;
 let rankSuggested = false;
 function suggestRankLogin() {
   if (account || !cloud.available || rankSuggested || state !== 'menu' || isChild(profile)) return;
   rankSuggested = true;
+  try {
+    if (Date.now() - (Number(localStorage.getItem(RANK_SUGGEST_KEY)) || 0) < WEEK) return;
+    localStorage.setItem(RANK_SUGGEST_KEY, String(Date.now()));
+  } catch { /* Shown once per visit, as before. */ }
   dialog(`<p class="eyebrow">🌍 Ranking mundial</p>${rankBadge(rankFor(profile.points).tier, 90)}<h2>¡Compite con todo el mundo!</h2><p>Tienes <b>${number(profile.points)} 🏆</b>, pero sin cuenta no cuentan en el ranking. Conecta tu cuenta de Google para rankear contra otros jugadores; además, tu progreso quedará guardado en la nube.</p><div class="dialog-buttons login-buttons"><button id="rank-suggest-login" class="dialog-button login google">Conectar con Google</button><button id="rank-suggest-later" class="dialog-button secondary">Ahora no</button></div>`);
   $('rank-suggest-login').onclick = signIn;
   $('rank-suggest-later').onclick = () => $('dialog').close();

@@ -18,7 +18,16 @@ const server = createServer(async (request, response) => {
     const file = path === '/' ? '/index.html' : path;
     if (!PUBLIC.has(file) && !/^\/fonts\/[a-z0-9-]+\.woff2$/.test(file) && !/^\/(icons|ui)\/[a-z0-9-]+\.png$/.test(file) && !/^\/audio\/[a-z0-9-]+\.mp3$/.test(file)) throw new Error('not public');
     const target = resolve(root, '.' + file), data = await readFile(target);
-    response.writeHead(200, { 'Content-Type': types[extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+    const headers = { 'Content-Type': types[extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store', 'Accept-Ranges': 'bytes' };
+    // Byte ranges let the songs seek back to the start when they loop.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.range || '');
+    if (range && (range[1] || range[2])) {
+      const from = range[1] ? Number(range[1]) : Math.max(0, data.length - Number(range[2])), to = range[1] && range[2] ? Math.min(Number(range[2]), data.length - 1) : data.length - 1;
+      if (from > to) { response.writeHead(416, { 'Content-Range': `bytes */${data.length}` }); response.end(); return; }
+      response.writeHead(206, { ...headers, 'Content-Range': `bytes ${from}-${to}/${data.length}` });
+      response.end(data.subarray(from, to + 1)); return;
+    }
+    response.writeHead(200, headers);
     response.end(data);
   } catch { response.writeHead(404); response.end('No encontrado'); }
 });
