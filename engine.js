@@ -507,7 +507,8 @@ export class Arena {
   assign(index, id) {
     const previous = this.grid[index];
     if (previous === id) return false;
-    if (previous >= 0) this.actors[previous].count--;
+    // Losing the last cell to someone else knocks the player out at the end of the step.
+    if (previous >= 0 && --this.actors[previous].count === 0 && id >= 0) (this.wiped ??= []).push([previous, id]);
     this.grid[index] = id;
     if (id >= 0) this.actors[id].count++;
     this.changes?.add(index);
@@ -808,6 +809,17 @@ export class Arena {
       }
     }
     if (!this.ended) this.moveShots(dt);
+    this.knockOutWiped();
     if (this.orbs.length < 45 && this.random() < dt * 3) this.spawnOrb();
+  }
+  // A player whose whole territory was painted over can never close a trail again: it is
+  // caught by whoever took its last cell, as if its trail had been cut.
+  knockOutWiped() {
+    if (!this.wiped?.length) return;
+    const wiped = this.wiped.splice(0);
+    for (const [victim, by] of wiped) {
+      const actor = this.actors[victim];
+      if (!this.ended && actor.alive && actor.count === 0) this.kill(actor, this.actors[by], '¡Te pintaron todo tu territorio!');
+    }
   }
 }

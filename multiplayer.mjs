@@ -3,9 +3,10 @@
 import { Arena, MATCH_SECONDS, MAX_PLAYERS, CHARACTERS, TRAILS, COLORS, CHARACTER_MAX_LEVEL, SIZE, PROGRESS_EPOCH, freshProfile, cleanName, matchStars } from './engine.js';
 
 export const STEP = 1 / 90;
-// 30 updates per second keep online movement smooth on phones.
+// 20 updates per second: the phones blend between them, and the free server (a tenth of a CPU)
+// stalls less than at 30. Quick matches wait 6 s for more players before starting.
 // Online matches last MATCH_SECONDS (3 minutes); tests can set a shorter one.
-const DEFAULTS = { tickMs: 33, matchSeconds: MATCH_SECONDS, quickWait: 10, maxRooms: 200 };
+const DEFAULTS = { tickMs: 50, matchSeconds: MATCH_SECONDS, quickWait: 6, maxRooms: 200 };
 // Kid-friendly room codes such as GATO-42 (no Ñ or accents, easy to type).
 const WORDS = ['GATO', 'PATO', 'SAPO', 'LUNA', 'NUBE', 'OSO', 'PEZ', 'SOL', 'RANA', 'MONO', 'LEON', 'COCO', 'KIWI', 'FOCA', 'PUMA', 'ROSA', 'MAGO', 'FARO'];
 // Bits of the per-actor flag field in state messages.

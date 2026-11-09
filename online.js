@@ -22,6 +22,13 @@ export function defaultServer() {
   if (!nativeApp() && /^https?:$/.test(location.protocol) && !location.hostname.endsWith('github.io')) return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
   return PUBLIC_SERVER;
 }
+// The free server sleeps after 15 minutes without players and takes up to a minute to wake
+// up: the game knocks as soon as it opens, so the server is ready by the time someone taps
+// "Jugar en línea". The answer is not needed (no-cors).
+export function wakeServer() {
+  const url = defaultServer().replace(/^ws/, 'http').replace(/\/ws$/, '/health');
+  fetch(url, { mode: 'no-cors', cache: 'no-store' }).catch(() => { /* Offline: online play will say so. */ });
+}
 
 export class Connection {
   constructor(url, onMessage, onClose) { Object.assign(this, { url, onMessage, onClose, rtt: 0 }); }

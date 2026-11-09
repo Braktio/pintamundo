@@ -1,6 +1,6 @@
 import { Arena, WIDTH, HEIGHT, SIZE, POWERS, CHARACTERS, RARITIES, RARITY_ORDER, CHESTS, FREE_CHEST_HOURS, TRAILS, RANKS, rankFor, tierStart, matchStars, seasonOf, previousSeason, seasonEnd, seasonName, seasonReward, CHARACTER_MAX_LEVEL, CHEST_BAR, PROGRESS_EPOCH, fillChestBar, levelChest, characterLevel, copiesFor, levelsUp, powerScale, dailyMissions, recordMatch, claimMission, claimMissionBonus, MISSION_BONUS, STREAK_REWARDS, streakStatus, claimStreak, characterFor, ownsCharacter, isChild, ageGroupFor, isSafeName, suggestNames, MATCH_SECONDS, openChest, freshProfile, parseProfile, cleanName, levelFor, levelXP } from './engine.js';
 import { Renderer, shade } from './renderer.js';
-import { Connection, Mirror, defaultServer } from './online.js';
+import { Connection, Mirror, defaultServer, wakeServer } from './online.js';
 import * as cloud from './cloud.js';
 import { music } from './soundtrack.js';
 import { adReady, watchAd, preloadAd, allowAds } from './ads.js';
@@ -1327,7 +1327,7 @@ function frame(time) {
   if (emotes.length) placeEmotes(time);
   requestAnimationFrame(frame);
 }
-showScreen('home'); requestAnimationFrame(frame);
+showScreen('home'); requestAnimationFrame(frame); wakeServer();
 if (storageError) toast('No se pudo cargar tu progreso de este teléfono.');
 // The cloud copy is checked first, so a returning player is not asked for a new name;
 // a slow network only delays the question by two seconds.

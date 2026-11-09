@@ -78,6 +78,19 @@ test('cutting a rival hands over its whole zone and rewards a kill', () => {
   assert.ok(arena.events.some(e => e.type === 'reward' && e.kills === 1));
   ownershipInvariant(arena);
 });
+test('painting over the whole territory of a rival knocks it out, even with its trail untouched', () => {
+  const arena = clean(), victim = arena.actors[1], painter = arena.actors[0];
+  for (let i = 0; i < 10; i++) arena.assign(i, 1);
+  trail(arena, victim, [[30, 30], [31, 30]]);
+  for (let i = 0; i < 9; i++) arena.assign(i, 0);
+  arena.knockOutWiped();
+  assert.equal(victim.alive, true, 'one cell left is enough to go home');
+  arena.assign(9, 0); arena.knockOutWiped();
+  assert.equal(victim.alive, false); assert.equal(painter.kills, 1);
+  assert.equal(victim.trail.length, 0);
+  assert.ok(arena.events.some(e => e.type === 'death' && e.id === 1 && e.killer === 0));
+  ownershipInvariant(arena);
+});
 test('shield preserves the victim and repels the attacker instead of rewarding a kill', () => {
   const arena = clean(), victim = arena.actors[1], attacker = arena.actors[0];
   trail(arena, victim, [[12, 12]]); victim.timers.shield = 1.5;
