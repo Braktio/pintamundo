@@ -493,7 +493,34 @@ setInterval(() => { if (state === 'menu') renderFreeChest(); }, 30000);
 function start() {
   disconnect();
   generation++; arena = new Arena(profile, Math.random, { timeLimit: MATCH_SECONDS }); mirror = null; state = 'playing'; accumulator = 0; aim = null; keys.clear(); resetSteer();
+  // Keep playing with a rewarded ad: offered at most once per match, when an ad is ready.
+  let offered = false;
+  arena.canRevive = () => !offered && adReady() && (offered = true);
   enterMatch(); announce('¡A PINTAR! 🎨'); renderHUD();
+}
+// Caught in a solo match with an ad ready: the match is frozen and the player can watch a
+// rewarded ad to come back with their land, or end it. The offer closes by itself in 8 s.
+const REVIVE_SECONDS = 8;
+function offerRevive() {
+  state = 'downed'; keys.clear(); resetSteer();
+  const gen = generation;
+  let left = REVIVE_SECONDS, timer = 0;
+  const decline = () => {
+    clearInterval(timer); if (gen !== generation || state !== 'downed') return;
+    $('dialog').close(); state = 'playing'; arena.giveUp(); processEvents();
+  };
+  dialog(`<p class="eyebrow">😵 ¡Te atraparon!</p><h2>¿Sigues jugando?</h2><p>Mira un anuncio y vuelve con toda tu zona y una burbuja protectora.</p><div class="revive-count" id="revive-count">${left}</div><div class="dialog-buttons"><button id="revive-yes" class="dialog-button ad-button">📺 ¡Sigue jugando!</button><button id="revive-no" class="dialog-button secondary">Terminar</button></div>`);
+  timer = setInterval(() => { left--; if ($('revive-count')) $('revive-count').textContent = left; if (left <= 0) decline(); }, 1000);
+  $('revive-no').onclick = decline;
+  $('revive-yes').onclick = async () => {
+    clearInterval(timer);
+    $('revive-yes').disabled = $('revive-no').disabled = true; $('revive-yes').textContent = '📺 Cargando…';
+    const rewarded = await watchAd();
+    if (gen !== generation || state !== 'downed') return;
+    if (!rewarded) { toast('Mira el anuncio completo para seguir jugando.'); decline(); return; }
+    arena.revive(); $('dialog').close(); state = 'playing';
+    processEvents(); $('arena').focus({ preventScroll: true });
+  };
 }
 // Shared by solo and online matches: reset effects and build the HUD for the current arena.
 function enterMatch() {
@@ -733,6 +760,8 @@ function processEvents() {
       if (spawnedAt !== arena.time) { spawnedAt = arena.time; announce('🤖 ¡Llegan robots nuevos!'); }
     }
     // Online, the server's "won" is about its own player 0: this phone's victory is its own.
+    if (event.type === 'downed' && event.id === 0) offerRevive();
+    if (event.type === 'revived' && event.id === 0) { announce('💪 ¡DE VUELTA!'); tone('level'); }
     if (event.type === 'end') end(mirror ? false : event.won, event.reason, event.ranking);
   }
 }
@@ -800,6 +829,7 @@ document.querySelectorAll('[data-help]').forEach(button => button.onclick = show
 $('dialog').addEventListener('cancel', event => {
   event.preventDefault();
   if (state === 'paused') $('resume')?.click();
+  else if (state === 'downed') $('revive-no')?.click();
   else if (state === 'results' || state === 'lobby') menu();
   else if (!$('crate-spinner') && !$('age-year')) $('dialog').close();
 });

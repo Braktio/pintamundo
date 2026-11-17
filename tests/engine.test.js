@@ -340,6 +340,26 @@ test('seasons: monthly, starting at half of last season, with better chests for 
   assert.deepEqual(seasonReward(0), ['comun']); assert.equal(seasonReward(1e6).length, 3);
   assert.deepEqual([matchStars({ won: true }), matchStars({ percent: 25 }), matchStars({ percent: 1, kills: 1 }), matchStars({ percent: 1 })], [3, 2, 1, 0]);
 });
+test('solo: keep playing once with a rewarded ad, back with all your land and a short Burbuja', () => {
+  const arena = clean(new Arena()), player = arena.actors[0], bot = arena.actors[1];
+  for (let y = 30; y < 35; y++) for (let x = 30; x < 35; x++) arena.assign(cell(x, y), 0);
+  let offers = 0; arena.canRevive = () => ++offers === 1;
+  arena.kill(player, bot);
+  assert.ok(arena.downed && !arena.ended, 'the match freezes on the offer');
+  assert.ok(arena.events.some(e => e.type === 'downed'));
+  assert.equal(player.count, 0, 'meanwhile the land is gone');
+  const time = arena.time; arena.step(1); assert.equal(arena.time, time, 'frozen while the offer is open');
+  assert.ok(arena.revive());
+  assert.ok(player.alive); assert.equal(player.count, 25, 'all 25 cells come back');
+  assert.ok(arena.active(player, 'shield')); assert.equal(arena.grid[cell(Math.floor(player.x), Math.floor(player.y))], 0, 'back inside its zone');
+  // Only once: the second time the match ends.
+  arena.kill(player, bot);
+  assert.ok(arena.ended && !arena.downed);
+  // Saying no ends it too.
+  const other = clean(new Arena()); for (let x = 10; x < 13; x++) other.assign(cell(x, 10), 0);
+  other.canRevive = () => true; other.kill(other.actors[0], other.actors[1]); other.giveUp();
+  assert.ok(other.ended); assert.ok(other.events.some(e => e.type === 'end'));
+});
 test('solo: more than half is a victory, but the match only ends at 100% or when caught', () => {
   const arena = clean();
   for (let i = 0; i < SIZE / 2; i++) arena.assign(i, 0);

@@ -199,6 +199,10 @@ Al abrir la app, el anuncio empieza a cargarse en segundo plano. Si no hay ningu
 
 AdMob limita los anuncios reales hasta que la app esté publicada en Google Play y vinculada en su consola.
 
+### Seguir jugando con un anuncio
+
+En solitario, si te atrapan y hay un anuncio con recompensa listo (mayores de 13 años), la partida se congela y se ofrece **«📺 ¡Sigue jugando!»** con una cuenta atrás de 8 s, **una vez por partida**. Si el jugador ve el anuncio completo, vuelve con toda la zona que tenía, en su centro, con 2,5 s de Burbuja (`revive` en `engine.js`, `offerRevive` en `game.js`). Si dice que no, cierra el anuncio antes de tiempo o se acaba la cuenta atrás, la partida termina como siempre (`giveUp`). En línea no se ofrece, para no ser injusto con los demás. `node scripts/revive-check.mjs "ruta/a/chrome.exe"` lo comprueba con un AdMob simulado.
+
 ### Anuncio entre partidas (intersticial)
 
 `betweenMatches` en `ads.js` muestra, como mucho, un anuncio a pantalla completa al salir de los resultados (al pulsar «Otra vez» o «Menú»). Nunca durante una partida, al abrir la app ni durante la apertura de cofres. Límites: 1 cada 3 partidas terminadas y cada 4 minutos (los anuncios con recompensa cuentan), y ninguno en las 3 primeras partidas de un jugador. Solo para mayores de 13 años, igual que los de recompensa. Mientras `INTERSTITIAL_ID` esté vacío no hay intersticiales.

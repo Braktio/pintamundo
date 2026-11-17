@@ -655,3 +655,6 @@ body.child-mode .login,body.child-mode .login-buttons .login,body.child-mode #ac
 /* Safe-name picker for children: big buttons, two per row. */
 .name-choices { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0 4px }
 .name-choices .dialog-button { min-height:54px; font-size:19px }
+
+/* Keep playing with a rewarded ad: the countdown */
+.revive-count { display:grid; place-items:center; width:72px; height:72px; margin:10px auto 0; border:5px solid var(--ink); border-radius:50%; background:var(--yellow); font:40px var(--display); color:var(--ink); box-shadow:0 4px 0 var(--ink) }

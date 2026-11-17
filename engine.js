@@ -407,6 +407,8 @@ const BOT_WEIGHTS = { comun: 40, raro: 30, epico: 18, legendario: 9, mitico: 3 }
 // Match pacing: matches last 3 minutes (the biggest zone wins) unless someone paints the
 // whole map first; characters move 15% faster than in the first versions.
 export const MATCH_SECONDS = 180;
+// Seconds of Burbuja after keeping on playing with a rewarded ad.
+export const REVIVE_SHIELD = 2.5;
 export const PLAYER_SPEED = 5.5, BOT_SPEED = 4.8, EASY_BOT_SPEED = 3.9;
 export const SPAWNS = [[42, 36], [26, 24], [59, 24], [25, 51], [59, 51], [42, 14], [43, 60]];
 export const MAX_PLAYERS = SPAWNS.length;
@@ -611,6 +613,7 @@ export class Arena {
     this.clearTrail(victim);
     const land = [];
     for (let i = 0; i < SIZE; i++) if (this.grid[i] === victim.id) land.push(i);
+    const owned = [...land];
     const stolen = killer?.alive ? land.length : 0;
     if (killer) land.sort((a, b) => {
       const pa = coords(a), pb = coords(b);
@@ -627,6 +630,9 @@ export class Arena {
     this.emit('death', { id: victim.id, killer: killer?.id ?? -1, x: victim.x, y: victim.y, reason, revenge, trail: brokenTrail, cutIndex });
     this.revision++;
     if (victim.human) {
+      // Solo: once per match the game may offer to keep playing (a rewarded ad). The match
+      // freezes until the game calls revive() or giveUp().
+      if (this.solo && owned.length && this.canRevive?.()) { this.downed = { land: owned, reason }; this.emit('downed', { id: victim.id, reason }); return; }
       if (this.solo) this.finish(-1, reason);
       else { this.emit('out', { id: victim.id, reason }); if (!this.actors.some(a => a.human && a.alive)) this.finish(-1, '¡Atraparon a todos los jugadores!'); }
     } else if (!this.respawnAt && !this.actors.some(a => !a.human && a.alive)) this.respawnAt = this.time + RESPAWN_DELAY;
@@ -759,8 +765,26 @@ export class Arena {
       if (this.ended) return;
     }
   }
+  // Brings the caught solo player back with all the land they had, at its middle, with a short
+  // Burbuja so nobody catches them again straight away.
+  revive() {
+    const downed = this.downed; if (!downed) return false;
+    this.downed = null;
+    const player = this.actors[0];
+    for (const index of downed.land) this.assign(index, 0);
+    const middle = downed.land.reduce((m, i) => { const p = coords(i); return { x: m.x + p.x / downed.land.length, y: m.y + p.y / downed.land.length }; }, { x: 0, y: 0 });
+    const home = downed.land.reduce((best, i) => { const p = coords(i), b = coords(best); return Math.hypot(p.x - middle.x, p.y - middle.y) < Math.hypot(b.x - middle.x, b.y - middle.y) ? i : best; }, downed.land[0]);
+    const spot = coords(home);
+    Object.assign(player, { alive: true, trail: [], x: spot.x, y: spot.y, lastCell: home, stunUntil: 0, frozenUntil: 0 });
+    player.timers.shield = this.time + REVIVE_SHIELD;
+    this.revision++; this.emit('revived', { id: 0, x: spot.x, y: spot.y });
+    this.checkWin();
+    return true;
+  }
+  // The player said no (or the ad was not watched): the match ends as usual.
+  giveUp() { const downed = this.downed; if (!downed) return; this.downed = null; this.finish(-1, downed.reason); }
   step(dt) {
-    if (this.ended) return;
+    if (this.ended || this.downed) return;
     this.time += dt;
     if (this.timeLimit && this.time >= this.timeLimit) { this.finish(this.actors.reduce((a, b) => b.count > a.count ? b : a).id, '¡Se acabó el tiempo!'); return; }
     if (this.respawnAt && this.time >= this.respawnAt) { this.respawnAt = 0; this.respawn(); }
