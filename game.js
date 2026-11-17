@@ -3,7 +3,7 @@ import { Renderer, shade } from './renderer.js';
 import { Connection, Mirror, defaultServer, wakeServer } from './online.js';
 import * as cloud from './cloud.js';
 import { music } from './soundtrack.js';
-import { adReady, watchAd, preloadAd, allowAds } from './ads.js';
+import { adReady, watchAd, preloadAd, allowAds, preloadInterstitial, matchFinished, betweenMatches } from './ads.js';
 
 const $ = id => document.getElementById(id);
 const root = document.documentElement;
@@ -566,7 +566,7 @@ function end(won, reason, ranking = null) {
   const completed = recordMatch(profile, today(), { kills: player.kills, percent, orbs: matchStats.orbs, powers: matchStats.powers, online: !!mirror, won });
   save(true);
   for (const mission of completed) toast(`✅ Misión cumplida: ${mission.text}. ¡Reclámala en Misiones!`);
-  void askNotifications(); preloadAd();
+  void askNotifications(); preloadAd(); matchFinished(); preloadInterstitial();
   const currentGeneration = generation;
   setTimeout(() => {
     if (currentGeneration !== generation) return;
@@ -578,8 +578,10 @@ function end(won, reason, ranking = null) {
     const bonus = Math.floor(arena.bits), adOffer = bonus > 0 && adReady() ? `<div class="dialog-buttons"><button class="dialog-button ad-button" id="ad-double">📺 Duplica tus estrellas: +${number(bonus)} ⭐</button></div>` : '';
     const actions = `${adOffer}<div class="dialog-buttons"><button class="dialog-button" id="retry">${!online ? '¡OTRA VEZ! ▶' : online.private ? '👫 Volver a la sala' : '¡OTRA PARTIDA! ▶'}</button><button class="dialog-button secondary" id="to-menu">🏠 Menú</button></div>`;
     const wire = () => {
-      $('retry').onclick = !online ? start : online.private ? () => online.lobby ? showLobby(online.lobby) : toast('La sala se está preparando…') : playAgainOnline;
-      $('to-menu').onclick = menu;
+      // Leaving the results is the only moment an interstitial may appear (see betweenMatches).
+      const again = !online ? start : online.private ? () => online.lobby ? showLobby(online.lobby) : toast('La sala se está preparando…') : playAgainOnline;
+      $('retry').onclick = () => { $('retry').disabled = true; void betweenMatches().then(() => { if ($('retry')) $('retry').disabled = false; again(); }); };
+      $('to-menu').onclick = () => void betweenMatches().then(menu);
       if ($('ad-double')) $('ad-double').onclick = async () => {
         const button = $('ad-double'); button.disabled = true;
         if (!await watchAd()) { button.disabled = false; button.hidden = !adReady(); toast('Mira el anuncio completo para duplicar tus estrellas.'); return; }

@@ -1,19 +1,29 @@
-// Rewarded ads with Google AdMob (Android app only). An ad is only shown when the player
-// chooses to watch one in return for a reward; there are no banners or forced ads. In the
-// browser, or before an ad has loaded, `adReady()` is false and the offers stay hidden.
+// Ads with Google AdMob (Android app only, players 13 and older). Rewarded ads are only shown
+// when the player chooses to watch one in return for a reward. Interstitials are rare and
+// only between matches (see betweenMatches). There are no banners. In the browser, or before
+// an ad has loaded, nothing is offered or shown.
 const AdMob = globalThis.Capacitor?.Plugins?.AdMob;
 const nativeApp = !!globalThis.Capacitor?.isNativePlatform?.();
 // The app ID lives in android/app/src/main/res/values/strings.xml (admob_app_id).
 // Pintamundo's rewarded ad unit. Google's test unit, ca-app-pub-3940256099942544/5224354917,
 // can be put here to try the flow without real ads.
 export const REWARDED_ID = 'ca-app-pub-8874186940779998/2770981951';
-const TESTING = REWARDED_ID.startsWith('ca-app-pub-3940256099942544/');
+const TEST_UNITS = 'ca-app-pub-3940256099942544/', TESTING = REWARDED_ID.startsWith(TEST_UNITS);
+// Pintamundo's interstitial unit (Google's test unit: ca-app-pub-3940256099942544/1033173712).
+// While it is empty, there are no interstitials.
+export const INTERSTITIAL_ID = '';
+// Interstitial limits: at most one every 3 finished matches and every 4 minutes (rewarded
+// ads count too), and never before a player's 3rd match.
+const EVERY_MATCHES = 3, MIN_GAP = 4 * 60000, FIRST_AFTER = 3;
+const LAST_AD_KEY = 'pintamundo.ads.last', MATCHES_KEY = 'pintamundo.ads.matches';
+const stored = key => { try { return Number(localStorage.getItem(key)) || 0; } catch { return 0; } };
+const store = (key, value) => { try { localStorage.setItem(key, String(value)); } catch { /* Limits reset; still rare. */ } };
 
-let started = null, loading = null, ready = false;
+let started = null, loading = null, ready = false, interstitialLoading = null, interstitialReady = false, matchesSince = 0;
 // Ads are off until the age screen says the player is 13 or older (Google Play Families policy:
 // children and users of unknown age see no ads here, and AdMob does not even start for them).
 let allowed = false;
-export function allowAds(value) { allowed = value === true; if (!allowed) ready = false; }
+export function allowAds(value) { allowed = value === true; if (!allowed) ready = interstitialReady = false; }
 // Consent first (Google shows its form only where the law asks for it), then the SDK.
 // Ads are limited to content suitable for all ages.
 function start() {
@@ -46,6 +56,32 @@ export function watchAd() {
     Promise.all([
       listen('onRewardedVideoAdDismissed', () => setTimeout(finish, 300)),
       listen('onRewardedVideoAdFailedToShow', finish)
-    ]).then(() => AdMob.showRewardVideoAd()).then(() => { rewarded = true; }, finish);
+    ]).then(() => AdMob.showRewardVideoAd()).then(() => { rewarded = true; store(LAST_AD_KEY, Date.now()); }, finish);
+  });
+}
+
+// Interstitials load in the background after a match, like rewarded ads.
+export function preloadInterstitial() {
+  if (!allowed || !nativeApp || !AdMob || !INTERSTITIAL_ID || interstitialReady || interstitialLoading) return;
+  interstitialLoading = start()
+    .then(() => AdMob.prepareInterstitial({ adId: INTERSTITIAL_ID, isTesting: INTERSTITIAL_ID.startsWith(TEST_UNITS), immersiveMode: true }))
+    .then(() => { interstitialReady = true; }, () => { interstitialReady = false; })
+    .finally(() => { interstitialLoading = null; });
+}
+// Counts a finished match towards the interstitial limits.
+export function matchFinished() { matchesSince++; store(MATCHES_KEY, stored(MATCHES_KEY) + 1); }
+// Called when the player leaves the results of a match (another match, or the menu). Shows an
+// interstitial only within the limits and resolves once it is closed (or right away).
+export function betweenMatches() {
+  if (!allowed || !interstitialReady || stored(MATCHES_KEY) < FIRST_AFTER || matchesSince < EVERY_MATCHES || Date.now() - stored(LAST_AD_KEY) < MIN_GAP) return Promise.resolve();
+  interstitialReady = false; matchesSince = 0; store(LAST_AD_KEY, Date.now());
+  return new Promise(resolve => {
+    let done = false;
+    const handles = [];
+    const finish = () => { if (done) return; done = true; for (const handle of handles) handle.remove?.(); resolve(); preloadInterstitial(); };
+    const listen = (event, handler) => Promise.resolve(AdMob.addListener(event, handler)).then(handle => handles.push(handle));
+    Promise.all([listen('interstitialAdDismissed', () => setTimeout(finish, 200)), listen('interstitialAdFailedToShow', finish)])
+      .then(() => AdMob.showInterstitial()).catch(finish);
+    setTimeout(finish, 120000); // Never leave the game waiting.
   });
 }

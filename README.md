@@ -199,6 +199,10 @@ Al abrir la app, el anuncio empieza a cargarse en segundo plano. Si no hay ningu
 
 AdMob limita los anuncios reales hasta que la app esté publicada en Google Play y vinculada en su consola.
 
+### Anuncio entre partidas (intersticial)
+
+`betweenMatches` en `ads.js` muestra, como mucho, un anuncio a pantalla completa al salir de los resultados (al pulsar «Otra vez» o «Menú»). Nunca durante una partida, al abrir la app ni durante la apertura de cofres. Límites: 1 cada 3 partidas terminadas y cada 4 minutos (los anuncios con recompensa cuentan), y ninguno en las 3 primeras partidas de un jugador. Solo para mayores de 13 años, igual que los de recompensa. Mientras `INTERSTITIAL_ID` esté vacío no hay intersticiales.
+
 ## Privacidad
 
 `privacy.html` (https://braktio.github.io/pintamundo/privacy.html) explica qué datos se usan y cómo borrarlos; se enlaza desde la cuenta. En **☁️ Cuenta de Google → Borrar mis datos de la nube** se eliminan `users/{uid}` y `ranking/{uid}`; el progreso del teléfono se conserva.

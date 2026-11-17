@@ -53,7 +53,7 @@ El archivo que se sube es **`pintamundo.aab`**, de la versión fija «apk» de G
 
 **Acceso a la app:** todas las funciones están disponibles sin acceso especial (la cuenta de Google es opcional).
 
-**Anuncios:** Sí, la app contiene anuncios (anuncios con recompensa de AdMob), **solo para jugadores de 13 años o más**. Para los menores de 13 (o si no indicaron su edad) AdMob ni siquiera se inicia.
+**Anuncios:** Sí, la app contiene anuncios de AdMob, **solo para jugadores de 13 años o más**: con recompensa (opcionales) e intersticiales poco frecuentes entre partidas (como mucho 1 cada 3 partidas y cada 4 minutos, nunca en las 3 primeras partidas ni durante el juego). Para los menores de 13 (o si no indicaron su edad) AdMob ni siquiera se inicia.
 
 **Clasificación de contenido (cuestionario IARC):**
 - Categoría: Juego.
